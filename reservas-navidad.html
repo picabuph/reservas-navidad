@@ -91,6 +91,7 @@
 </div>
 
 <div class="toast" id="toast"></div>
+<div id="guardandoBar" style="display:none;position:fixed;top:0;left:0;right:0;z-index:30;background:#c08a4e;color:#fff;text-align:center;font:600 13px Montserrat,sans-serif;padding:6px">Guardando…</div>
 
 <script>
 const CLAVE = new URLSearchParams(location.search).get('k') || '';
@@ -107,16 +108,29 @@ function run(){
     return (...args) => {
       if (window.google && google.script && google.script.run)
         return google.script.run.withSuccessHandler(ok).withFailureHandler(fail)[fn](...args);
-      fetch(API, { method: 'POST', credentials: 'omit', redirect: 'follow', body: JSON.stringify({ k: args[0], fn: fn, args: args.slice(1) }) })
+      fetch(API, { method: 'POST', credentials: 'omit', redirect: 'follow', keepalive: fn !== 'getTurnos', body: JSON.stringify({ k: args[0], fn: fn, args: args.slice(1) }) })
         .then(x => x.json()).then(j => j.ok ? ok(j.data) : fail(new Error(j.error))).catch(fail);
     };
   }});
 }
-let turnos = [], dia = '2026-11-28', actual = null, cancelArmado = false;
+let turnos = [], dia = '2026-11-28', actual = null, cancelArmado = false, plantilla = '', formLink = '', guiaLink = '', pendientes = 0;
+const PRECIOS = { Preventa: 180000, Regular: 230000 };
 
 function cargar(despues){
-  run().withSuccessHandler(t => { turnos = t; pintar(); if (despues) despues(); }).withFailureHandler(error).getTurnos(CLAVE);
+  run().withSuccessHandler(r => {
+    if (pendientes > 0) return;
+    if (Array.isArray(r)) turnos = r; else { turnos = r.turnos; plantilla = r.plantilla; formLink = r.form; guiaLink = r.guia; }
+    pintar();
+    if (actual && document.getElementById('pDetalle').classList.contains('on')) { const a = buscar(actual.fila); if (a && a.estado === 'Reservado') { actual = a; refrescarFicha(); } }
+    if (despues) despues();
+  }).withFailureHandler(error).getTurnos(CLAVE);
 }
+function guardando(n){
+  pendientes += n;
+  document.getElementById('guardandoBar').style.display = pendientes > 0 ? 'block' : 'none';
+  if (pendientes === 0) cargar();
+}
+
 function elegirDia(el){
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('on'));
   el.classList.add('on'); dia = el.dataset.f; pintar();
@@ -141,6 +155,21 @@ function pintar(){
 }
 function buscar(f){ return turnos.find(t => t.fila === f); }
 
+// ---- mensaje armado en el momento, sin esperar al servidor ----
+function pesos(n){ return '$' + Math.round(Number(n) || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
+function horaCorta(h){ h = String(h); return h.endsWith(':00') ? h.slice(0, -3) : h; }
+function waIntl(s){ let d = String(s || '').replace(/\D/g, '').replace(/^0+/, ''); if (d.startsWith('54')) return d; if (d.length === 10) return '549' + d; return d; }
+function mensaje(t){
+  return (plantilla || '').replace(/{DIA}/g, t.dia).replace(/{HORA}/g, horaCorta(t.hora)).replace(/{SALDO}/g, t.saldo)
+    .replace(/{FORM}/g, formLink).replace(/{GUIA}/g, guiaLink).replace(/{NOMBRE}/g, String(t.clienta || '').split(' ')[0]);
+}
+function setWa(t){
+  const txt = encodeURIComponent(mensaje(t)), tel = waIntl(t.wa);
+  const b = document.getElementById('btnWa');
+  if (/iPhone|iPad|Android/i.test(navigator.userAgent)) { b.href = 'https://wa.me/' + tel + '?text=' + txt; b.target = '_blank'; }
+  else { b.href = 'https://web.whatsapp.com/send?phone=' + tel + '&text=' + txt; b.target = 'whatsapp'; }
+}
+
 function abrirReserva(f){
   actual = buscar(f);
   document.getElementById('rTitulo').textContent = actual.dia + ' · ' + actual.hora;
@@ -152,54 +181,47 @@ function abrirReserva(f){
 function guardar(){
   const d = { nombre: val('rNombre'), wa: val('rWa'), tipo: val('rTipo'), sena: val('rSena'), notas: val('rNotas') };
   if (!d.nombre || !d.wa) return aviso('Completá nombre y WhatsApp');
-  const b = document.getElementById('rGuardar'); b.disabled = true; b.textContent = 'Guardando…';
-  run().withSuccessHandler(det => {
-    b.disabled = false; b.textContent = 'Reservar turno';
-    cargar(() => mostrarDetalle(det)); aviso('Turno reservado ✓');
-  }).withFailureHandler(e => { b.disabled = false; b.textContent = 'Reservar turno'; error(e); cargar(); }).reservar(CLAVE, actual.fila, d);
+  const t = actual;
+  if (t.estado !== 'Libre') return aviso('Ese turno ya está reservado');
+  Object.assign(t, { estado: 'Reservado', clienta: d.nombre, wa: d.wa, saldo: pesos(PRECIOS[d.tipo] - (Number(d.sena) || 0)),
+    conf: 'No', form: 'No', email: '', ninos: '', notas: d.notas });
+  pintar(); abrirDetalle(t.fila);
+  guardando(1);
+  run().withSuccessHandler(() => { aviso('Turno guardado ✓'); guardando(-1); })
+    .withFailureHandler(e => { alert('⚠️ No se pudo guardar el turno de ' + d.nombre + '.\n' + (e.message || e) + '\n\nNo le mandes el mensaje todavía.'); cerrar(); guardando(-1); })
+    .reservar(CLAVE, t.fila, d);
 }
 
 function abrirDetalle(f){
-  mostrarDetalle({ fila: f, mensaje: 'Armando el mensaje…', link: '#' });
-  run().withSuccessHandler(det => {
-    if (!actual || actual.fila !== det.fila) return;
-    document.getElementById('msg').value = det.mensaje; setWa(det.link);
-  }).withFailureHandler(error).detalle(CLAVE, f);
-}
-function setWa(link){
-  document.getElementById('btnWa').href = (link === '#' || /iPhone|iPad|Android/i.test(navigator.userAgent)) ? link :
-    link.replace('https://wa.me/', 'https://web.whatsapp.com/send?phone=').replace('?text=', '&text=');
-}
-function guardarDatosFicha(){
-  const d = { nombre: val('eNombre'), ninos: val('eNinos'), email: val('eEmail'), notas: val('eNotas') };
-  if (!d.nombre) return aviso('El nombre no puede quedar vacío');
-  const b = document.getElementById('btnGuardarDatos'); b.disabled = true; b.textContent = 'Guardando…';
-  run().withSuccessHandler(det => {
-    b.disabled = false; b.textContent = 'Guardar cambios'; aviso('Cambios guardados ✓');
-    cargar(() => { actual = buscar(det.fila); document.getElementById('dNombre').textContent = actual.clienta; document.getElementById('msg').value = det.mensaje; setWa(det.link); });
-  }).withFailureHandler(e => { b.disabled = false; b.textContent = 'Guardar cambios'; error(e); }).guardarDatos(CLAVE, actual.fila, d);
-}
-function noEnviado(){
-  run().withSuccessHandler(() => { actual.conf = 'No'; document.getElementById('btnNoEnv').style.display = 'none'; cargar(); aviso('Listo · figura como no enviado'); })
-    .withFailureHandler(error).marcarConfirmada(CLAVE, actual.fila, 'No');
-}
-function mostrarDetalle(det){
-  actual = buscar(det.fila); cancelArmado = false;
+  actual = buscar(f); cancelArmado = false;
   document.getElementById('btnCancel').textContent = 'Cancelar turno';
   document.getElementById('dMover').style.display = 'none';
+  refrescarFicha();
+  abrir('pDetalle');
+}
+function refrescarFicha(){
   document.getElementById('dNombre').textContent = actual.clienta;
   document.getElementById('dTurno').textContent = actual.dia + ' · ' + actual.hora + ' hs';
   document.getElementById('dDatos').innerHTML =
     `<b>WhatsApp:</b> ${esc(actual.wa)}<br><b>Saldo en efectivo:</b> ${actual.saldo}<br>` +
     `<b>Formulario:</b> ${actual.form === 'Sí' ? '✓ completo' : 'falta completar'}`;
-  document.getElementById('eNombre').value = actual.clienta || '';
-  document.getElementById('eNinos').value = actual.ninos || '';
-  document.getElementById('eEmail').value = actual.email || '';
-  document.getElementById('eNotas').value = actual.notas || '';
-  document.getElementById('msg').value = det.mensaje;
-  setWa(det.link);
+  ['eNombre','eNinos','eEmail','eNotas'].forEach(id => { const el = document.getElementById(id); if (document.activeElement !== el) el.value = actual[{eNombre:'clienta',eNinos:'ninos',eEmail:'email',eNotas:'notas'}[id]] || ''; });
+  document.getElementById('msg').value = mensaje(actual);
+  setWa(actual);
   document.getElementById('btnNoEnv').style.display = actual.conf === 'Sí' ? 'block' : 'none';
-  abrir('pDetalle');
+}
+function guardarDatosFicha(){
+  const d = { nombre: val('eNombre'), ninos: val('eNinos'), email: val('eEmail'), notas: val('eNotas') };
+  if (!d.nombre) return aviso('El nombre no puede quedar vacío');
+  Object.assign(actual, { clienta: d.nombre, ninos: d.ninos, email: d.email.toLowerCase(), notas: d.notas });
+  pintar(); refrescarFicha(); guardando(1);
+  run().withSuccessHandler(() => { aviso('Cambios guardados ✓'); guardando(-1); })
+    .withFailureHandler(e => { alert('⚠️ No se pudieron guardar los cambios: ' + (e.message || e)); guardando(-1); })
+    .guardarDatos(CLAVE, actual.fila, d);
+}
+function noEnviado(){
+  actual.conf = 'No'; pintar(); refrescarFicha(); guardando(1);
+  run().withSuccessHandler(() => guardando(-1)).withFailureHandler(e => { error(e); guardando(-1); }).marcarConfirmada(CLAVE, actual.fila, 'No');
 }
 function copiar(){
   const t = document.getElementById('msg');
@@ -208,9 +230,9 @@ function copiar(){
   else { t.select(); document.execCommand('copy'); ok(); }
 }
 function enviado(){
-  if (!actual || actual.conf === 'Sí' || document.getElementById('msg').value.startsWith('Armando')) return;
-  actual.conf = 'Sí'; document.getElementById('btnNoEnv').style.display = 'block';
-  run().withSuccessHandler(() => cargar()).marcarConfirmada(CLAVE, actual.fila, 'Sí');
+  if (!actual || actual.conf === 'Sí') return;
+  actual.conf = 'Sí'; pintar(); document.getElementById('btnNoEnv').style.display = 'block'; guardando(1);
+  run().withSuccessHandler(() => guardando(-1)).withFailureHandler(e => { error(e); guardando(-1); }).marcarConfirmada(CLAVE, actual.fila, 'Sí');
 }
 function verMover(){
   const libres = turnos.filter(t => t.estado === 'Libre');
@@ -219,13 +241,20 @@ function verMover(){
   document.getElementById('dMover').style.display = 'block';
 }
 function moverA(dest){
-  run().withSuccessHandler(det => { cargar(() => mostrarDetalle(det)); aviso('Turno movido ✓ · mandale el mensaje nuevo'); })
-    .withFailureHandler(e => { error(e); cargar(); }).mover(CLAVE, actual.fila, dest);
+  const a = actual, b = buscar(dest);
+  ['estado','clienta','wa','saldo','form','email','ninos','notas'].forEach(k => b[k] = a[k]);
+  b.conf = 'No';
+  Object.assign(a, { estado: 'Libre', clienta: '', wa: '', saldo: '', conf: '', form: '', email: '', ninos: '', notas: '' });
+  pintar(); abrirDetalle(dest); aviso('Turno movido ✓ · mandale el mensaje nuevo'); guardando(1);
+  run().withSuccessHandler(() => guardando(-1)).withFailureHandler(e => { alert('⚠️ No se pudo mover el turno: ' + (e.message || e)); cerrar(); guardando(-1); }).mover(CLAVE, a.fila, dest);
 }
 function cancelarTurno(){
   const b = document.getElementById('btnCancel');
   if (!cancelArmado) { cancelArmado = true; b.textContent = 'Tocá de nuevo para confirmar la cancelación'; return; }
-  run().withSuccessHandler(() => { cerrar(); cargar(); aviso('Turno cancelado · quedó libre'); }).withFailureHandler(error).cancelar(CLAVE, actual.fila);
+  const f = actual.fila;
+  Object.assign(actual, { estado: 'Libre', clienta: '', wa: '', saldo: '', conf: '', form: '', email: '', ninos: '', notas: '' });
+  cerrar(); pintar(); aviso('Turno cancelado · quedó libre'); guardando(1);
+  run().withSuccessHandler(() => guardando(-1)).withFailureHandler(e => { alert('⚠️ No se pudo cancelar: ' + (e.message || e)); guardando(-1); }).cancelar(CLAVE, f);
 }
 
 function abrir(id){ document.getElementById(id).classList.add('on'); window.scrollTo(0,0); }
