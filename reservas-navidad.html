@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Reservas Navidad · Picabú</title>
+<base target="_top">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600&family=Yeseva+One&display=swap" rel="stylesheet">
+<style>
+  :root{--cafe:#5a3e36;--crema:#fbf6ef;--beige:#efe4d6;--linea:#e4d6c5;--texto:#3b2a25;--suave:#8a7468;--ok:#6f8f72;--pend:#c08a4e;--rojo:#a8504a}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--crema);color:var(--texto);font-family:Montserrat,sans-serif;font-size:15px}
+  header{background:var(--cafe);color:var(--crema);padding:22px 16px 0;position:sticky;top:0;z-index:5}
+  h1{font-family:'Yeseva One',serif;font-weight:400;font-size:26px;margin:0}
+  .sub{font-size:12px;opacity:.75;margin:2px 0 14px;letter-spacing:.04em}
+  .tabs{display:flex;gap:6px}
+  .tab{flex:1;padding:12px 6px;text-align:center;border-radius:10px 10px 0 0;background:rgba(255,255,255,.1);font-weight:500;font-size:14px}
+  .tab.on{background:var(--crema);color:var(--cafe)}
+  main{padding:14px 16px 40px}
+  .resumen{font-size:13px;color:var(--suave);margin:0 0 12px}
+  .card{cursor:pointer;background:#fff;border:1px solid var(--linea);border-radius:12px;padding:14px;margin-bottom:10px;display:flex;gap:14px;align-items:center}
+  .hora{font-family:'Yeseva One',serif;font-size:20px;color:var(--cafe);min-width:62px}
+  .info{flex:1;min-width:0}
+  .nombre{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ninosTxt{font-size:13px;color:var(--cafe);margin-top:3px;line-height:1.35}
+  .libre{color:var(--suave);font-style:italic}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+  .chip{font-size:11px;padding:3px 8px;border-radius:20px;background:var(--beige)}
+  .chip.ok{background:#e3ece3;color:var(--ok)} .chip.pend{background:#f6e8d6;color:var(--pend)}
+  .card.vacio{background:transparent;border-style:dashed}
+  .flecha{color:var(--suave);font-size:20px}
+  .panel{position:fixed;inset:0;background:var(--crema);z-index:10;overflow:auto;display:none;padding:18px 16px 40px}
+  .panel.on{display:block}
+  .volver{background:none;border:none;color:var(--cafe);font:500 15px Montserrat;padding:0;margin-bottom:14px}
+  h2{font-family:'Yeseva One',serif;font-weight:400;color:var(--cafe);font-size:22px;margin:0 0 4px}
+  label{display:block;font-size:12px;font-weight:600;color:var(--suave);margin:14px 0 6px;text-transform:uppercase;letter-spacing:.05em}
+  input,select,textarea{width:100%;padding:13px;border:1px solid var(--linea);border-radius:10px;font:15px Montserrat;background:#fff;color:var(--texto)}
+  textarea{min-height:90px}
+  #msg{min-height:300px;font-size:14px;line-height:1.5}
+  .btn{display:block;width:100%;padding:15px;border:none;border-radius:12px;font:600 15px Montserrat;margin-top:12px;text-align:center;text-decoration:none}
+  .prim{background:var(--cafe);color:var(--crema)} .wa{background:#25D366;color:#fff}
+  .sec{background:#fff;color:var(--cafe);border:1px solid var(--linea)} .peligro{background:#fff;color:var(--rojo);border:1px solid #e8c9c6}
+  .datos{background:#fff;border:1px solid var(--linea);border-radius:12px;padding:14px;margin-top:12px;font-size:14px;line-height:1.7}
+  .datos b{color:var(--cafe)}
+  .fila2{display:flex;gap:10px}.fila2>div{flex:1}
+  .slots{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+  .toast{position:fixed;left:16px;right:16px;bottom:20px;background:var(--cafe);color:var(--crema);padding:14px;border-radius:12px;text-align:center;z-index:20;display:none}
+  .cargando{text-align:center;color:var(--suave);padding:40px 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>Reservas Navidad</h1>
+  <div class="sub">PICABÚ FOTOGRAFÍA</div>
+  <div class="tabs">
+    <div class="tab on" data-f="2026-11-28" onclick="elegirDia(this)">Sábado 28</div>
+    <div class="tab" data-f="2026-11-29" onclick="elegirDia(this)">Domingo 29</div>
+  </div>
+</header>
+<main id="lista"><div class="cargando">Cargando turnos…</div></main>
+
+<div class="panel" id="pReserva">
+  <button class="volver" onclick="cerrar()">← Volver</button>
+  <h2 id="rTitulo"></h2>
+  <label>Nombre o usuario de Instagram</label><input id="rNombre">
+  <label>WhatsApp</label><input id="rWa" type="tel" placeholder="11 3833 1475">
+  <div class="fila2">
+    <div><label>Precio</label><select id="rTipo"><option value="Preventa">Preventa $180.000</option><option value="Regular">Regular $230.000</option></select></div>
+    <div><label>Seña recibida</label><input id="rSena" type="number" inputmode="numeric" value="80000"></div>
+  </div>
+  <label>Notas (opcional)</label><textarea id="rNotas"></textarea>
+  <button class="btn prim" id="rGuardar" onclick="guardar()">Reservar turno</button>
+</div>
+
+<div class="panel" id="pDetalle">
+  <button class="volver" onclick="cerrar()">← Volver</button>
+  <h2 id="dNombre"></h2>
+  <div id="dTurno" class="resumen"></div>
+  <div class="datos" id="dDatos"></div>
+  <label>Nombre de la clienta</label><input id="eNombre">
+  <label>Niños (nombre y edad)</label><textarea id="eNinos" style="min-height:60px"></textarea>
+  <label>Email</label><input id="eEmail" type="email">
+  <label>Notas</label><textarea id="eNotas" style="min-height:60px"></textarea>
+  <button class="btn sec" id="btnGuardarDatos" onclick="guardarDatosFicha()">Guardar cambios</button>
+  <label>Mensaje de confirmación</label>
+  <textarea id="msg"></textarea>
+  <button class="btn sec" onclick="copiar()">Copiar mensaje</button>
+  <a class="btn wa" id="btnWa" target="_blank" onclick="enviado()">Abrir WhatsApp de la clienta</a>
+  <button class="btn sec" id="btnNoEnv" style="display:none" onclick="noEnviado()">Marcar WhatsApp como NO enviado</button>
+  <button class="btn sec" style="margin-top:28px" onclick="verMover()">Mover a otro horario</button>
+  <div id="dMover" style="display:none"><label>Elegí el nuevo horario</label><div class="slots" id="dSlots"></div></div>
+  <button class="btn peligro" id="btnCancel" onclick="cancelarTurno()">Cancelar turno</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const CLAVE = new URLSearchParams(location.search).get('k') || '';
+const API = 'https://script.google.com/macros/s/AKfycbxsVHSmHlWQd5K781Nx4sPPzgWkM8i7iOJ0HdrNn1XAN4AZJh4xA1net9oCrgAuA7qEjw/exec';
+function run(){
+  let ok = () => {}, fail = error;
+  let px;
+  const r = {
+    withSuccessHandler(f){ ok = f; return px; },
+    withFailureHandler(f){ fail = f; return px; }
+  };
+  return px = new Proxy(r, { get(t, fn){
+    if (fn in t) return t[fn];
+    return (...args) => {
+      if (window.google && google.script && google.script.run)
+        return google.script.run.withSuccessHandler(ok).withFailureHandler(fail)[fn](...args);
+      fetch(API, { method: 'POST', credentials: 'omit', redirect: 'follow', body: JSON.stringify({ k: args[0], fn: fn, args: args.slice(1) }) })
+        .then(x => x.json()).then(j => j.ok ? ok(j.data) : fail(new Error(j.error))).catch(fail);
+    };
+  }});
+}
+let turnos = [], dia = '2026-11-28', actual = null, cancelArmado = false;
+
+function cargar(despues){
+  run().withSuccessHandler(t => { turnos = t; pintar(); if (despues) despues(); }).withFailureHandler(error).getTurnos(CLAVE);
+}
+function elegirDia(el){
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('on'));
+  el.classList.add('on'); dia = el.dataset.f; pintar();
+}
+function pintar(){
+  const del = turnos.filter(t => t.fecha === dia);
+  const res = del.filter(t => t.estado === 'Reservado');
+  let h = `<p class="resumen">${res.length} reservados · ${del.length - res.length} libres</p>`;
+  del.forEach(t => {
+    if (t.estado === 'Reservado') {
+      h += `<div class="card" onclick="abrirDetalle(${t.fila})"><div class="hora">${t.hora}</div><div class="info">
+        <div class="nombre">${esc(t.clienta)}</div>
+        ${t.ninos ? `<div class="ninosTxt">${esc(t.ninos)}</div>` : ''}
+        <div class="chips"><span class="chip ${t.conf==='Sí'?'ok':'pend'}">${t.conf==='Sí'?'✓ WhatsApp enviado':'Falta enviar WhatsApp'}</span>
+        <span class="chip ${t.form==='Sí'?'ok':'pend'}">${t.form==='Sí'?'✓ Formulario':'Falta formulario'}</span>
+        <span class="chip">Saldo ${t.saldo}</span></div></div><div class="flecha">›</div></div>`;
+    } else {
+      h += `<div class="card vacio" onclick="abrirReserva(${t.fila})"><div class="hora">${t.hora}</div><div class="info libre">Libre · tocá para reservar</div><div class="flecha">+</div></div>`;
+    }
+  });
+  document.getElementById('lista').innerHTML = h;
+}
+function buscar(f){ return turnos.find(t => t.fila === f); }
+
+function abrirReserva(f){
+  actual = buscar(f);
+  document.getElementById('rTitulo').textContent = actual.dia + ' · ' + actual.hora;
+  ['rNombre','rWa','rNotas'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('rSena').value = 80000;
+  document.getElementById('rTipo').value = 'Preventa';
+  abrir('pReserva');
+}
+function guardar(){
+  const d = { nombre: val('rNombre'), wa: val('rWa'), tipo: val('rTipo'), sena: val('rSena'), notas: val('rNotas') };
+  if (!d.nombre || !d.wa) return aviso('Completá nombre y WhatsApp');
+  const b = document.getElementById('rGuardar'); b.disabled = true; b.textContent = 'Guardando…';
+  run().withSuccessHandler(det => {
+    b.disabled = false; b.textContent = 'Reservar turno';
+    cargar(() => mostrarDetalle(det)); aviso('Turno reservado ✓');
+  }).withFailureHandler(e => { b.disabled = false; b.textContent = 'Reservar turno'; error(e); cargar(); }).reservar(CLAVE, actual.fila, d);
+}
+
+function abrirDetalle(f){
+  mostrarDetalle({ fila: f, mensaje: 'Armando el mensaje…', link: '#' });
+  run().withSuccessHandler(det => {
+    if (!actual || actual.fila !== det.fila) return;
+    document.getElementById('msg').value = det.mensaje; setWa(det.link);
+  }).withFailureHandler(error).detalle(CLAVE, f);
+}
+function setWa(link){
+  document.getElementById('btnWa').href = (link === '#' || /iPhone|iPad|Android/i.test(navigator.userAgent)) ? link :
+    link.replace('https://wa.me/', 'https://web.whatsapp.com/send?phone=').replace('?text=', '&text=');
+}
+function guardarDatosFicha(){
+  const d = { nombre: val('eNombre'), ninos: val('eNinos'), email: val('eEmail'), notas: val('eNotas') };
+  if (!d.nombre) return aviso('El nombre no puede quedar vacío');
+  const b = document.getElementById('btnGuardarDatos'); b.disabled = true; b.textContent = 'Guardando…';
+  run().withSuccessHandler(det => {
+    b.disabled = false; b.textContent = 'Guardar cambios'; aviso('Cambios guardados ✓');
+    cargar(() => { actual = buscar(det.fila); document.getElementById('dNombre').textContent = actual.clienta; document.getElementById('msg').value = det.mensaje; setWa(det.link); });
+  }).withFailureHandler(e => { b.disabled = false; b.textContent = 'Guardar cambios'; error(e); }).guardarDatos(CLAVE, actual.fila, d);
+}
+function noEnviado(){
+  run().withSuccessHandler(() => { actual.conf = 'No'; document.getElementById('btnNoEnv').style.display = 'none'; cargar(); aviso('Listo · figura como no enviado'); })
+    .withFailureHandler(error).marcarConfirmada(CLAVE, actual.fila, 'No');
+}
+function mostrarDetalle(det){
+  actual = buscar(det.fila); cancelArmado = false;
+  document.getElementById('btnCancel').textContent = 'Cancelar turno';
+  document.getElementById('dMover').style.display = 'none';
+  document.getElementById('dNombre').textContent = actual.clienta;
+  document.getElementById('dTurno').textContent = actual.dia + ' · ' + actual.hora + ' hs';
+  document.getElementById('dDatos').innerHTML =
+    `<b>WhatsApp:</b> ${esc(actual.wa)}<br><b>Saldo en efectivo:</b> ${actual.saldo}<br>` +
+    `<b>Formulario:</b> ${actual.form === 'Sí' ? '✓ completo' : 'falta completar'}`;
+  document.getElementById('eNombre').value = actual.clienta || '';
+  document.getElementById('eNinos').value = actual.ninos || '';
+  document.getElementById('eEmail').value = actual.email || '';
+  document.getElementById('eNotas').value = actual.notas || '';
+  document.getElementById('msg').value = det.mensaje;
+  setWa(det.link);
+  document.getElementById('btnNoEnv').style.display = actual.conf === 'Sí' ? 'block' : 'none';
+  abrir('pDetalle');
+}
+function copiar(){
+  const t = document.getElementById('msg');
+  const ok = () => { aviso('Mensaje copiado ✓'); enviado(); };
+  if (navigator.clipboard) navigator.clipboard.writeText(t.value).then(ok).catch(() => { t.select(); document.execCommand('copy'); ok(); });
+  else { t.select(); document.execCommand('copy'); ok(); }
+}
+function enviado(){
+  if (!actual || actual.conf === 'Sí' || document.getElementById('msg').value.startsWith('Armando')) return;
+  actual.conf = 'Sí'; document.getElementById('btnNoEnv').style.display = 'block';
+  run().withSuccessHandler(() => cargar()).marcarConfirmada(CLAVE, actual.fila, 'Sí');
+}
+function verMover(){
+  const libres = turnos.filter(t => t.estado === 'Libre');
+  document.getElementById('dSlots').innerHTML = libres.length ? libres.map(t =>
+    `<button class="btn sec" style="margin:0" onclick="moverA(${t.fila})">${t.dia.split(' ')[0].slice(0,3)} ${t.hora}</button>`).join('') : '<p class="resumen">No hay turnos libres.</p>';
+  document.getElementById('dMover').style.display = 'block';
+}
+function moverA(dest){
+  run().withSuccessHandler(det => { cargar(() => mostrarDetalle(det)); aviso('Turno movido ✓ · mandale el mensaje nuevo'); })
+    .withFailureHandler(e => { error(e); cargar(); }).mover(CLAVE, actual.fila, dest);
+}
+function cancelarTurno(){
+  const b = document.getElementById('btnCancel');
+  if (!cancelArmado) { cancelArmado = true; b.textContent = 'Tocá de nuevo para confirmar la cancelación'; return; }
+  run().withSuccessHandler(() => { cerrar(); cargar(); aviso('Turno cancelado · quedó libre'); }).withFailureHandler(error).cancelar(CLAVE, actual.fila);
+}
+
+function abrir(id){ document.getElementById(id).classList.add('on'); window.scrollTo(0,0); }
+function cerrar(){ document.querySelectorAll('.panel').forEach(p => p.classList.remove('on')); }
+function val(id){ return document.getElementById(id).value.trim(); }
+function esc(s){ return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function aviso(t){ const x = document.getElementById('toast'); x.textContent = t; x.style.display = 'block'; setTimeout(() => x.style.display = 'none', 2600); }
+function error(e){ aviso('Ups: ' + (e && e.message ? e.message : e)); }
+cargar();
+</script>
+</body>
+</html>
