@@ -21,6 +21,11 @@
   .info{flex:1;min-width:0}
   .nombre{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .ninosTxt{font-size:13px;color:var(--cafe);margin-top:3px;line-height:1.35}
+  .cont{background:#fff;border:1px solid var(--linea);border-radius:12px;padding:14px;margin-bottom:10px}
+  .cont .fila3{display:flex;gap:8px;margin-top:10px}.cont .fila3 .btn{margin:0;padding:11px;font-size:14px}
+  .cont .dato{font-size:14px;line-height:1.6}.cont .dato b{color:var(--cafe)}
+  #badgeCont{background:#c08a4e;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:2px}
+  #badgeCont:empty{display:none}
   .libre{color:var(--suave);font-style:italic}
   .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
   .chip{font-size:11px;padding:3px 8px;border-radius:20px;background:var(--beige)}
@@ -53,6 +58,7 @@
   <div class="tabs">
     <div class="tab on" data-f="2026-11-28" onclick="elegirDia(this)">Sábado 28</div>
     <div class="tab" data-f="2026-11-29" onclick="elegirDia(this)">Domingo 29</div>
+    <div class="tab" data-f="contable" onclick="elegirDia(this)">Contable <span id="badgeCont"></span></div>
   </div>
 </header>
 <main id="lista"><div class="cargando">Cargando turnos…</div></main>
@@ -135,7 +141,43 @@ function elegirDia(el){
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('on'));
   el.classList.add('on'); dia = el.dataset.f; pintar();
 }
+// ---- registro contable ----
+function nombresNinos(t){
+  return String(t || '').split(/\n|,|;|\sy\s|\s-\s/).map(x => x
+    .replace(/\(.*?\)/g, '').replace(/\d+[.,]?\d*\s*(años|año|anios|meses|mes|m|a|días|dias|semanas)?\b\.?/gi, '')
+    .replace(/\s+/g, ' ').trim().replace(/\s+(de|con|tiene)$/i, '')).filter(Boolean).join(', ');
+}
+function clienteCont(t){ const n = nombresNinos(t.ninos); return t.clienta + (n ? ' / ' + n : ''); }
+function codigoCont(t){ return t.precio === 180000 ? 'Navidad-PREV' : 'Navidad'; }
+function filaCont(t){ return [t.fventa || '', clienteCont(t), codigoCont(t)].join('\t'); }
+function pendientesCont(){ return turnos.filter(t => t.estado === 'Reservado' && t.reg !== 'Sí'); }
+function pintarContable(){
+  const p = pendientesCont();
+  let h = p.length ? `<p class="resumen">${p.length} para pasar al registro contable · pegalas en la columna <b>Fecha</b> (C) de la pestaña Ventas</p>
+    <button class="btn prim" style="margin:0 0 14px" onclick="copiarCont()">Copiar todas (${p.length})</button>`
+    : '<p class="resumen" style="text-align:center;padding:30px 0">✓ Todo registrado</p>';
+  p.forEach(t => {
+    h += `<div class="cont"><div class="dato"><b>${esc(t.fventa || 'sin fecha')}</b> · ${esc(clienteCont(t))}<br><span style="color:var(--suave)">${codigoCont(t)} · turno ${esc(t.dia.split(' ')[0])} ${t.hora}</span></div>
+      <div class="fila3"><button class="btn sec" onclick="copiarCont(${t.fila})">Copiar</button>
+      <button class="btn prim" onclick="registrar(${t.fila})">✓ Registrado</button></div></div>`;
+  });
+  document.getElementById('lista').innerHTML = h;
+}
+function copiarCont(f){
+  const filas = f ? [buscar(f)] : pendientesCont();
+  const txt = filas.map(filaCont).join('\n');
+  const ok = () => aviso(filas.length > 1 ? filas.length + ' filas copiadas ✓' : 'Fila copiada ✓');
+  if (navigator.clipboard) navigator.clipboard.writeText(txt).then(ok).catch(() => copiaVieja(txt, ok)); else copiaVieja(txt, ok);
+}
+function copiaVieja(txt, ok){ const a = document.createElement('textarea'); a.value = txt; document.body.appendChild(a); a.select(); document.execCommand('copy'); a.remove(); ok(); }
+function registrar(f){
+  const t = buscar(f); t.reg = 'Sí'; pintar(); aviso('Marcada como registrada ✓'); guardando(1);
+  run().withSuccessHandler(() => guardando(-1)).withFailureHandler(e => { t.reg = 'No'; pintar(); error(e); guardando(-1); }).marcarRegistrado(CLAVE, f, 'Sí');
+}
+
 function pintar(){
+  const nC = pendientesCont().length; document.getElementById('badgeCont').textContent = nC ? nC : '';
+  if (dia === 'contable') return pintarContable();
   const del = turnos.filter(t => t.fecha === dia);
   const res = del.filter(t => t.estado === 'Reservado');
   let h = `<p class="resumen">${res.length} reservados · ${del.length - res.length} libres</p>`;
@@ -184,7 +226,8 @@ function guardar(){
   const t = actual;
   if (t.estado !== 'Libre') return aviso('Ese turno ya está reservado');
   Object.assign(t, { estado: 'Reservado', clienta: d.nombre, wa: d.wa, saldo: pesos(PRECIOS[d.tipo] - (Number(d.sena) || 0)),
-    conf: 'No', form: 'No', email: '', ninos: '', notas: d.notas });
+    conf: 'No', form: 'No', email: '', ninos: '', notas: d.notas, precio: PRECIOS[d.tipo], reg: 'No',
+    fventa: new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' }) });
   pintar(); abrirDetalle(t.fila);
   guardando(1);
   run().withSuccessHandler(() => { aviso('Turno guardado ✓'); guardando(-1); })
@@ -242,9 +285,9 @@ function verMover(){
 }
 function moverA(dest){
   const a = actual, b = buscar(dest);
-  ['estado','clienta','wa','saldo','form','email','ninos','notas'].forEach(k => b[k] = a[k]);
+  ['estado','clienta','wa','saldo','form','email','ninos','notas','precio','fventa','reg'].forEach(k => b[k] = a[k]);
   b.conf = 'No';
-  Object.assign(a, { estado: 'Libre', clienta: '', wa: '', saldo: '', conf: '', form: '', email: '', ninos: '', notas: '' });
+  Object.assign(a, { estado: 'Libre', clienta: '', wa: '', saldo: '', conf: '', form: '', email: '', ninos: '', notas: '', precio: 0, fventa: '', reg: '' });
   pintar(); abrirDetalle(dest); aviso('Turno movido ✓ · mandale el mensaje nuevo'); guardando(1);
   run().withSuccessHandler(() => guardando(-1)).withFailureHandler(e => { alert('⚠️ No se pudo mover el turno: ' + (e.message || e)); cerrar(); guardando(-1); }).mover(CLAVE, a.fila, dest);
 }
@@ -252,7 +295,7 @@ function cancelarTurno(){
   const b = document.getElementById('btnCancel');
   if (!cancelArmado) { cancelArmado = true; b.textContent = 'Tocá de nuevo para confirmar la cancelación'; return; }
   const f = actual.fila;
-  Object.assign(actual, { estado: 'Libre', clienta: '', wa: '', saldo: '', conf: '', form: '', email: '', ninos: '', notas: '' });
+  Object.assign(actual, { estado: 'Libre', clienta: '', wa: '', saldo: '', conf: '', form: '', email: '', ninos: '', notas: '', precio: 0, fventa: '', reg: '' });
   cerrar(); pintar(); aviso('Turno cancelado · quedó libre'); guardando(1);
   run().withSuccessHandler(() => guardando(-1)).withFailureHandler(e => { alert('⚠️ No se pudo cancelar: ' + (e.message || e)); guardando(-1); }).cancelar(CLAVE, f);
 }
