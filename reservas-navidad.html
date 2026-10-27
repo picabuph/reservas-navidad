@@ -84,7 +84,7 @@
   <button class="volver" onclick="cerrar()">← Volver</button>
   <h2 id="rTitulo"></h2>
   <label>Nombre o usuario de Instagram</label><input id="rNombre">
-  <label>WhatsApp</label><input id="rWa" type="tel" placeholder="11 3833 1475">
+  <label>WhatsApp (si todavía no lo tenés, cargalo después)</label><input id="rWa" type="tel" placeholder="11 3833 1475">
   <div class="fila2">
     <div><label>Precio</label><select id="rTipo"><option value="Preventa">Preventa $180.000</option><option value="Regular">Regular $230.000</option></select></div>
     <div><label>Seña recibida</label><input id="rSena" type="number" inputmode="numeric" value="80000"></div>
@@ -99,6 +99,8 @@
   <div id="dTurno" class="resumen"></div>
   <div class="datos" id="dDatos"></div>
   <label>Nombre de la clienta</label><input id="eNombre">
+  <label>WhatsApp</label><input id="eWa" type="tel" placeholder="11 3833 1475">
+  <div id="avisoWa" style="display:none;font-size:12px;color:#a8504a;margin-top:6px">Sin WhatsApp, su formulario no se va a vincular con este turno. Cargalo antes de mandarle el link.</div>
   <label>Niños (nombre y edad)</label><textarea id="eNinos" style="min-height:60px"></textarea>
   <label>Email</label><input id="eEmail" type="email">
   <label>Notas</label><textarea id="eNotas" style="min-height:60px"></textarea>
@@ -242,12 +244,14 @@ function quitarExtra(f){
   const t = buscar(f); t.estado = 'Eliminado'; pintar(); aviso('Horario quitado'); guardando(1);
   run().withSuccessHandler(() => guardando(-1)).withFailureHandler(e => { t.estado = 'Libre'; pintar(); error(e); guardando(-1); }).quitarTurno(CLAVE, f);
 }
+function sinWa(t){ return String(t.wa || '').replace(/\D/g, '').length < 8; }
 function tarjeta(t){
   if (t.estado === 'Reservado') {
     return `<div class="card" onclick="abrirDetalle(${t.fila})"><div class="hora">${t.hora}</div><div class="info">
         <div class="nombre">${esc(t.clienta)}</div>
         ${t.ninos ? `<div class="ninosTxt">${esc(t.ninos)}</div>` : ''}
         <div class="chips"><span class="chip ${t.conf==='Sí'?'ok':'pend'}">${t.conf==='Sí'?'✓ WhatsApp enviado':'Falta enviar WhatsApp'}</span>
+        ${sinWa(t) ? '<span class="chip pend">⚠️ Falta WhatsApp</span>' : ''}
         <span class="chip ${t.form==='Sí'?'ok':'pend'}">${t.form==='Sí'?'✓ Formulario':'Falta formulario'}</span>
         <span class="chip">Saldo ${t.saldo}</span></div></div><div class="flecha">›</div></div>`;
   }
@@ -291,7 +295,7 @@ function abrirReserva(f){
 }
 function guardar(){
   const d = { nombre: val('rNombre'), wa: val('rWa'), tipo: val('rTipo'), sena: val('rSena'), notas: val('rNotas') };
-  if (!d.nombre || !d.wa) return aviso('Completá nombre y WhatsApp');
+  if (!d.nombre) return aviso('Completá al menos el nombre');
   const t = actual;
   if (t.estado !== 'Libre') return aviso('Ese turno ya está reservado');
   Object.assign(t, { estado: 'Reservado', clienta: d.nombre, wa: d.wa, saldo: pesos(PRECIOS[d.tipo] - (Number(d.sena) || 0)),
@@ -319,16 +323,17 @@ function refrescarFicha(){
     `<b>Formulario:</b> ${actual.form === 'Sí' ? '✓ completo' : 'falta completar'}`;
   if (document.activeElement !== document.getElementById('eTipo')) document.getElementById('eTipo').value = actual.precio === 230000 ? 'Regular' : 'Preventa';
   if (document.activeElement !== document.getElementById('eSena')) document.getElementById('eSena').value = (actual.precio || 0) - numero(actual.saldo);
-  ['eNombre','eNinos','eEmail','eNotas'].forEach(id => { const el = document.getElementById(id); if (document.activeElement !== el) el.value = actual[{eNombre:'clienta',eNinos:'ninos',eEmail:'email',eNotas:'notas'}[id]] || ''; });
+  ['eNombre','eWa','eNinos','eEmail','eNotas'].forEach(id => { const el = document.getElementById(id); if (document.activeElement !== el) el.value = actual[{eNombre:'clienta',eWa:'wa',eNinos:'ninos',eEmail:'email',eNotas:'notas'}[id]] || ''; });
   document.getElementById('msg').value = mensaje(actual);
   setWa(actual);
+  document.getElementById('avisoWa').style.display = sinWa(actual) ? 'block' : 'none';
   document.getElementById('btnNoEnv').style.display = actual.conf === 'Sí' ? 'block' : 'none';
 }
 function guardarDatosFicha(){
-  const d = { nombre: val('eNombre'), ninos: val('eNinos'), email: val('eEmail'), notas: val('eNotas'), tipo: val('eTipo'), sena: Number(val('eSena')) || 0 };
+  const d = { nombre: val('eNombre'), wa: val('eWa'), ninos: val('eNinos'), email: val('eEmail'), notas: val('eNotas'), tipo: val('eTipo'), sena: Number(val('eSena')) || 0 };
   if (!d.nombre) return aviso('El nombre no puede quedar vacío');
   if (d.sena > PRECIOS[d.tipo]) return aviso('La seña no puede ser mayor al precio');
-  Object.assign(actual, { clienta: d.nombre, ninos: d.ninos, email: d.email.toLowerCase(), notas: d.notas,
+  Object.assign(actual, { clienta: d.nombre, wa: d.wa, ninos: d.ninos, email: d.email.toLowerCase(), notas: d.notas,
     precio: PRECIOS[d.tipo], saldo: pesos(PRECIOS[d.tipo] - d.sena) });
   pintar(); refrescarFicha(); guardando(1);
   run().withSuccessHandler(() => { aviso('Cambios guardados ✓'); guardando(-1); })
