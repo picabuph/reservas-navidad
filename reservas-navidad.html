@@ -12,7 +12,12 @@
   h1{font-family:'Yeseva One',serif;font-weight:400;font-size:26px;margin:0}
   .sub{font-size:12px;opacity:.75;margin:2px 0 14px;letter-spacing:.04em}
   .tabs{display:flex;gap:6px}
-  .tab{flex:1;padding:12px 6px;text-align:center;border-radius:10px 10px 0 0;background:rgba(255,255,255,.1);font-weight:500;font-size:14px}
+  .tab{flex:1;padding:11px 4px;text-align:center;border-radius:10px 10px 0 0;background:rgba(255,255,255,.1);font-weight:500;font-size:13px;line-height:1.2;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .grupo{margin:4px 0 14px}.grupoTit{display:flex;align-items:center;gap:8px;padding:12px 2px;border-bottom:1px solid var(--linea);margin-bottom:10px;cursor:pointer}
+  .grupoTit .t{font-family:'Yeseva One',serif;color:var(--cafe);font-size:18px;flex:1}.grupoTit .n{font-size:12px;color:var(--suave)}
+  .grupoTit .fl{color:var(--cafe);transition:transform .2s}.grupo.cerrado .fl{transform:rotate(-90deg)}.grupo.cerrado .cuerpo{display:none}
+  .mini{background:none;border:1px dashed var(--linea);color:var(--cafe);border-radius:10px;padding:10px;width:100%;font:500 14px Montserrat;cursor:pointer}
+  .quitar{background:none;border:none;color:var(--suave);font-size:12px;text-decoration:underline;padding:4px 0 10px;cursor:pointer}
   .tab.on{background:var(--crema);color:var(--cafe)}
   main{padding:14px 16px 40px}
   .resumen{font-size:13px;color:var(--suave);margin:0 0 12px}
@@ -26,6 +31,9 @@
   .cont .dato{font-size:14px;line-height:1.6}.cont .dato b{color:var(--cafe)}
   #badgeCont{background:#c08a4e;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:2px}
   #badgeCont:empty{display:none}
+  .resumenCaja{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 18px}
+  .kpi{background:#fff;border:1px solid var(--linea);border-radius:12px;padding:12px}
+  .kpi .v{font-family:'Yeseva One',serif;color:var(--cafe);font-size:20px}.kpi .l{font-size:11px;color:var(--suave);text-transform:uppercase;letter-spacing:.05em;margin-top:2px}
   .libre{color:var(--suave);font-style:italic}
   .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
   .chip{font-size:11px;padding:3px 8px;border-radius:20px;background:var(--beige)}
@@ -58,10 +66,19 @@
   <div class="tabs">
     <div class="tab on" data-f="2026-11-28" onclick="elegirDia(this)">Sábado 28</div>
     <div class="tab" data-f="2026-11-29" onclick="elegirDia(this)">Domingo 29</div>
+    <div class="tab" data-f="extras" onclick="elegirDia(this)">Fechas extras</div>
     <div class="tab" data-f="contable" onclick="elegirDia(this)">Contable <span id="badgeCont"></span></div>
   </div>
 </header>
 <main id="lista"><div class="cargando">Cargando turnos…</div></main>
+
+<div class="panel" id="pExtra">
+  <button class="volver" onclick="cerrar()">← Volver</button>
+  <h2>Agregar turno extra</h2>
+  <label>Fecha</label><input id="xFecha" type="date" min="2026-10-01">
+  <label>Horario</label><input id="xHora" type="time" step="900" value="16:00">
+  <button class="btn prim" id="xGuardar" onclick="agregarExtra()">Agregar horario</button>
+</div>
 
 <div class="panel" id="pReserva">
   <button class="volver" onclick="cerrar()">← Volver</button>
@@ -151,11 +168,22 @@ function clienteCont(t){ const n = nombresNinos(t.ninos); return t.clienta + (n 
 function codigoCont(t){ return t.precio === 180000 ? 'Navidad-PREV' : 'Navidad'; }
 function filaCont(t){ return [t.fventa || '', clienteCont(t), codigoCont(t)].join('\t'); }
 function pendientesCont(){ return turnos.filter(t => t.estado === 'Reservado' && t.reg !== 'Sí'); }
+function numero(s){ return Number(String(s || '').replace(/\D/g, '')) || 0; }
+function resumenVentas(){
+  const v = turnos.filter(t => t.estado === 'Reservado');
+  const total = v.reduce((a, t) => a + (t.precio || 0), 0);
+  const pend = v.reduce((a, t) => a + numero(t.saldo), 0);
+  return `<div class="resumenCaja">
+    <div class="kpi"><div class="v">${v.length}</div><div class="l">Sesiones vendidas</div></div>
+    <div class="kpi"><div class="v">${pesos(total)}</div><div class="l">Total ventas</div></div>
+    <div class="kpi"><div class="v">${pesos(total - pend)}</div><div class="l">Cobrado (señas)</div></div>
+    <div class="kpi"><div class="v">${pesos(pend)}</div><div class="l">Pendiente en efectivo</div></div></div>`;
+}
 function pintarContable(){
   const p = pendientesCont();
-  let h = p.length ? `<p class="resumen">${p.length} para pasar al registro contable · pegalas en la columna <b>Fecha</b> (C) de la pestaña Ventas</p>
+  let h = resumenVentas() + (p.length ? `<p class="resumen">${p.length} para pasar al registro contable · pegalas en la columna <b>Fecha</b> (C) de la pestaña Ventas</p>
     <button class="btn prim" style="margin:0 0 14px" onclick="copiarCont()">Copiar todas (${p.length})</button>`
-    : '<p class="resumen" style="text-align:center;padding:30px 0">✓ Todo registrado</p>';
+    : '<p class="resumen" style="text-align:center;padding:30px 0">✓ Todo registrado</p>');
   p.forEach(t => {
     h += `<div class="cont"><div class="dato"><b>${esc(t.fventa || 'sin fecha')}</b> · ${esc(clienteCont(t))}<br><span style="color:var(--suave)">${codigoCont(t)} · turno ${esc(t.dia.split(' ')[0])} ${t.hora}</span></div>
       <div class="fila3"><button class="btn sec" onclick="copiarCont(${t.fila})">Copiar</button>
@@ -175,24 +203,61 @@ function registrar(f){
   run().withSuccessHandler(() => guardando(-1)).withFailureHandler(e => { t.reg = 'No'; pintar(); error(e); guardando(-1); }).marcarRegistrado(CLAVE, f, 'Sí');
 }
 
-function pintar(){
-  const nC = pendientesCont().length; document.getElementById('badgeCont').textContent = nC ? nC : '';
-  if (dia === 'contable') return pintarContable();
-  const del = turnos.filter(t => t.fecha === dia);
-  const res = del.filter(t => t.estado === 'Reservado');
-  let h = `<p class="resumen">${res.length} reservados · ${del.length - res.length} libres</p>`;
-  del.forEach(t => {
-    if (t.estado === 'Reservado') {
-      h += `<div class="card" onclick="abrirDetalle(${t.fila})"><div class="hora">${t.hora}</div><div class="info">
+// ---- fechas extras ----
+const DIAS_EVENTO = ['2026-11-28', '2026-11-29'];
+let cerrados = {};
+try { cerrados = JSON.parse(localStorage.getItem('picabuCerrados') || '{}'); } catch (e) {}
+function esExtra(t){ return !DIAS_EVENTO.includes(t.fecha); }
+function pintarExtras(){
+  const ext = turnos.filter(t => esExtra(t) && t.estado !== 'Eliminado');
+  const fechas = [...new Set(ext.map(t => t.fecha))].sort();
+  let h = fechas.length ? '' : '<p class="resumen" style="text-align:center;padding:24px 0 8px">Todavía no hay fechas extras</p>';
+  fechas.forEach(f => {
+    const del = ext.filter(t => t.fecha === f).sort((a, b) => a.hora.localeCompare(b.hora));
+    const res = del.filter(t => t.estado === 'Reservado').length;
+    h += `<div class="grupo${cerrados[f] ? ' cerrado' : ''}"><div class="grupoTit" onclick="plegar('${f}')"><span class="fl">▾</span><span class="t">${esc(del[0].dia)}</span>
+      <span class="n">${res} reservados · ${del.length - res} libres</span></div><div class="cuerpo">`;
+    del.forEach(t => { h += tarjeta(t); if (t.estado === 'Libre') h += `<button class="quitar" onclick="quitarExtra(${t.fila})">Quitar este horario</button>`; });
+    h += `<button class="mini" onclick="abrirExtra('${f}')">+ Agregar horario este día</button></div></div>`;
+  });
+  h += `<button class="btn prim" style="margin-top:6px" onclick="abrirExtra('')">+ Agregar otra fecha</button>`;
+  document.getElementById('lista').innerHTML = h;
+}
+function plegar(f){ cerrados[f] = !cerrados[f]; try { localStorage.setItem('picabuCerrados', JSON.stringify(cerrados)); } catch (e) {} pintar(); }
+function abrirExtra(f){ document.getElementById('xFecha').value = f; abrir('pExtra'); }
+function agregarExtra(){
+  const f = val('xFecha'), h = val('xHora');
+  if (!f || !h) return aviso('Elegí fecha y horario');
+  if (DIAS_EVENTO.includes(f)) return aviso('Esa fecha ya tiene su propia solapa');
+  if (turnos.some(t => t.fecha === f && t.hora === h && t.estado !== 'Eliminado')) return aviso('Ese horario ya existe');
+  const b = document.getElementById('xGuardar'); b.disabled = true; b.textContent = 'Agregando…';
+  run().withSuccessHandler(() => { b.disabled = false; b.textContent = 'Agregar horario'; cerrados[f] = false; cerrar(); aviso('Horario agregado ✓'); cargar(); })
+    .withFailureHandler(e => { b.disabled = false; b.textContent = 'Agregar horario'; error(e); }).agregarTurno(CLAVE, f, h);
+}
+function quitarExtra(f){
+  const t = buscar(f); t.estado = 'Eliminado'; pintar(); aviso('Horario quitado'); guardando(1);
+  run().withSuccessHandler(() => guardando(-1)).withFailureHandler(e => { t.estado = 'Libre'; pintar(); error(e); guardando(-1); }).quitarTurno(CLAVE, f);
+}
+function tarjeta(t){
+  if (t.estado === 'Reservado') {
+    return `<div class="card" onclick="abrirDetalle(${t.fila})"><div class="hora">${t.hora}</div><div class="info">
         <div class="nombre">${esc(t.clienta)}</div>
         ${t.ninos ? `<div class="ninosTxt">${esc(t.ninos)}</div>` : ''}
         <div class="chips"><span class="chip ${t.conf==='Sí'?'ok':'pend'}">${t.conf==='Sí'?'✓ WhatsApp enviado':'Falta enviar WhatsApp'}</span>
         <span class="chip ${t.form==='Sí'?'ok':'pend'}">${t.form==='Sí'?'✓ Formulario':'Falta formulario'}</span>
         <span class="chip">Saldo ${t.saldo}</span></div></div><div class="flecha">›</div></div>`;
-    } else {
-      h += `<div class="card vacio" onclick="abrirReserva(${t.fila})"><div class="hora">${t.hora}</div><div class="info libre">Libre · tocá para reservar</div><div class="flecha">+</div></div>`;
-    }
-  });
+  }
+  return `<div class="card vacio" onclick="abrirReserva(${t.fila})"><div class="hora">${t.hora}</div><div class="info libre">Libre · tocá para reservar</div><div class="flecha">+</div></div>`;
+}
+
+function pintar(){
+  const nC = pendientesCont().length; document.getElementById('badgeCont').textContent = nC ? nC : '';
+  if (dia === 'contable') return pintarContable();
+  if (dia === 'extras') return pintarExtras();
+  const del = turnos.filter(t => t.fecha === dia);
+  const res = del.filter(t => t.estado === 'Reservado');
+  let h = `<p class="resumen">${res.length} reservados · ${del.length - res.length} libres</p>`;
+  del.forEach(t => { h += tarjeta(t); });
   document.getElementById('lista').innerHTML = h;
 }
 function buscar(f){ return turnos.find(t => t.fila === f); }
@@ -278,9 +343,9 @@ function enviado(){
   run().withSuccessHandler(() => guardando(-1)).withFailureHandler(e => { error(e); guardando(-1); }).marcarConfirmada(CLAVE, actual.fila, 'Sí');
 }
 function verMover(){
-  const libres = turnos.filter(t => t.estado === 'Libre');
+  const libres = turnos.filter(t => t.estado === 'Libre').sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
   document.getElementById('dSlots').innerHTML = libres.length ? libres.map(t =>
-    `<button class="btn sec" style="margin:0" onclick="moverA(${t.fila})">${t.dia.split(' ')[0].slice(0,3)} ${t.hora}</button>`).join('') : '<p class="resumen">No hay turnos libres.</p>';
+    `<button class="btn sec" style="margin:0" onclick="moverA(${t.fila})">${t.dia.split(' ')[0].slice(0,3)} ${t.dia.split(' ')[1] || ''} · ${t.hora}</button>`).join('') : '<p class="resumen">No hay turnos libres.</p>';
   document.getElementById('dMover').style.display = 'block';
 }
 function moverA(dest){
