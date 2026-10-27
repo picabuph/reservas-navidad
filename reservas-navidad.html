@@ -102,6 +102,10 @@
   <label>Niños (nombre y edad)</label><textarea id="eNinos" style="min-height:60px"></textarea>
   <label>Email</label><input id="eEmail" type="email">
   <label>Notas</label><textarea id="eNotas" style="min-height:60px"></textarea>
+  <div class="fila2">
+    <div><label>Precio</label><select id="eTipo"><option value="Preventa">Preventa $180.000</option><option value="Regular">Regular $230.000</option></select></div>
+    <div><label>Seña cobrada</label><input id="eSena" type="number" inputmode="numeric"></div>
+  </div>
   <button class="btn sec" id="btnGuardarDatos" onclick="guardarDatosFicha()">Guardar cambios</button>
   <label>Mensaje de confirmación</label>
   <textarea id="msg"></textarea>
@@ -313,15 +317,19 @@ function refrescarFicha(){
   document.getElementById('dDatos').innerHTML =
     `<b>WhatsApp:</b> ${esc(actual.wa)}<br><b>Saldo en efectivo:</b> ${actual.saldo}<br>` +
     `<b>Formulario:</b> ${actual.form === 'Sí' ? '✓ completo' : 'falta completar'}`;
+  if (document.activeElement !== document.getElementById('eTipo')) document.getElementById('eTipo').value = actual.precio === 230000 ? 'Regular' : 'Preventa';
+  if (document.activeElement !== document.getElementById('eSena')) document.getElementById('eSena').value = (actual.precio || 0) - numero(actual.saldo);
   ['eNombre','eNinos','eEmail','eNotas'].forEach(id => { const el = document.getElementById(id); if (document.activeElement !== el) el.value = actual[{eNombre:'clienta',eNinos:'ninos',eEmail:'email',eNotas:'notas'}[id]] || ''; });
   document.getElementById('msg').value = mensaje(actual);
   setWa(actual);
   document.getElementById('btnNoEnv').style.display = actual.conf === 'Sí' ? 'block' : 'none';
 }
 function guardarDatosFicha(){
-  const d = { nombre: val('eNombre'), ninos: val('eNinos'), email: val('eEmail'), notas: val('eNotas') };
+  const d = { nombre: val('eNombre'), ninos: val('eNinos'), email: val('eEmail'), notas: val('eNotas'), tipo: val('eTipo'), sena: Number(val('eSena')) || 0 };
   if (!d.nombre) return aviso('El nombre no puede quedar vacío');
-  Object.assign(actual, { clienta: d.nombre, ninos: d.ninos, email: d.email.toLowerCase(), notas: d.notas });
+  if (d.sena > PRECIOS[d.tipo]) return aviso('La seña no puede ser mayor al precio');
+  Object.assign(actual, { clienta: d.nombre, ninos: d.ninos, email: d.email.toLowerCase(), notas: d.notas,
+    precio: PRECIOS[d.tipo], saldo: pesos(PRECIOS[d.tipo] - d.sena) });
   pintar(); refrescarFicha(); guardando(1);
   run().withSuccessHandler(() => { aviso('Cambios guardados ✓'); guardando(-1); })
     .withFailureHandler(e => { alert('⚠️ No se pudieron guardar los cambios: ' + (e.message || e)); guardando(-1); })
