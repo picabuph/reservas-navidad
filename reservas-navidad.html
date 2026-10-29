@@ -217,7 +217,7 @@ function esExtra(t){ return !DIAS_EVENTO.includes(t.fecha); }
 function pintarExtras(){
   const ext = turnos.filter(t => esExtra(t) && t.estado !== 'Eliminado');
   const fechas = [...new Set(ext.map(t => t.fecha))].sort();
-  let h = fechas.length ? '' : '<p class="resumen" style="text-align:center;padding:24px 0 8px">Todavía no hay fechas extras</p>';
+  let h = fechas.length ? BTN_HORARIOS : '<p class="resumen" style="text-align:center;padding:24px 0 8px">Todavía no hay fechas extras</p>';
   fechas.forEach(f => {
     const del = ext.filter(t => t.fecha === f).sort((a, b) => a.hora.localeCompare(b.hora));
     const res = del.filter(t => t.estado === 'Reservado').length;
@@ -258,13 +258,32 @@ function tarjeta(t){
   return `<div class="card vacio" onclick="abrirReserva(${t.fila})"><div class="hora">${t.hora}</div><div class="info libre">Libre · tocá para reservar</div><div class="flecha">+</div></div>`;
 }
 
+// ---- copiar horarios disponibles ----
+const BTN_HORARIOS = '<button class="btn sec" style="margin:0 0 14px" onclick="copiarHorarios()">📋 Copiar horarios disponibles</button>';
+function textoHorarios(){
+  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
+  const libres = turnos.filter(t => t.estado === 'Libre' && t.fecha >= hoy);
+  const fechas = [...new Set(libres.map(t => t.fecha))].sort();
+  if (!fechas.length) return '';
+  return 'Horarios disponibles para las sesiones de Navidad 🎄\n\n' + fechas.map(f => {
+    const del = libres.filter(t => t.fecha === f).sort((a, b) => a.hora.localeCompare(b.hora));
+    return '*' + del[0].dia + '*\n' + del.map(t => horaCorta(t.hora) + 'hs').join(' · ');
+  }).join('\n\n');
+}
+function copiarHorarios(){
+  const txt = textoHorarios();
+  if (!txt) return aviso('No quedan horarios disponibles');
+  const ok = () => aviso('Horarios copiados ✓ · pegalos en WhatsApp');
+  if (navigator.clipboard) navigator.clipboard.writeText(txt).then(ok).catch(() => copiaVieja(txt, ok)); else copiaVieja(txt, ok);
+}
+
 function pintar(){
   const nC = pendientesCont().length; document.getElementById('badgeCont').textContent = nC ? nC : '';
   if (dia === 'contable') return pintarContable();
   if (dia === 'extras') return pintarExtras();
   const del = turnos.filter(t => t.fecha === dia);
   const res = del.filter(t => t.estado === 'Reservado');
-  let h = `<p class="resumen">${res.length} reservados · ${del.length - res.length} libres</p>`;
+  let h = `<p class="resumen">${res.length} reservados · ${del.length - res.length} libres</p>` + BTN_HORARIOS;
   del.forEach(t => { h += tarjeta(t); });
   document.getElementById('lista').innerHTML = h;
 }
