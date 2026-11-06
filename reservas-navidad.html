@@ -70,6 +70,7 @@
     <div class="tab" data-f="contable" onclick="elegirDia(this)">Contable <span id="badgeCont"></span></div>
   </div>
 </header>
+<div id="alertaForm" style="display:none;margin:12px 16px 0;background:#f6e8d6;border:1px solid #e8cfae;border-radius:12px;padding:12px 14px;font-size:14px;color:#3b2a25"></div>
 <main id="lista"><div class="cargando">Cargando turnos…</div></main>
 
 <div class="panel" id="pExtra">
@@ -86,7 +87,7 @@
   <label>Nombre o usuario de Instagram</label><input id="rNombre">
   <label>WhatsApp (si todavía no lo tenés, cargalo después)</label><input id="rWa" type="tel" placeholder="11 3833 1475">
   <div class="fila2">
-    <div><label>Precio</label><select id="rTipo"><option value="Preventa">Preventa $180.000</option><option value="Regular">Regular $230.000</option></select></div>
+    <div><label>Precio</label><select id="rTipo"><option value="Preventa">Preventa $180.000</option><option value="Regular">Regular $230.000</option><option value="Premium">Premium $295.000</option></select></div>
     <div><label>Seña recibida</label><input id="rSena" type="number" inputmode="numeric" value="80000"></div>
   </div>
   <label>Notas (opcional)</label><textarea id="rNotas"></textarea>
@@ -105,14 +106,14 @@
   <label>Email</label><input id="eEmail" type="email">
   <label>Notas</label><textarea id="eNotas" style="min-height:60px"></textarea>
   <div class="fila2">
-    <div><label>Precio</label><select id="eTipo"><option value="Preventa">Preventa $180.000</option><option value="Regular">Regular $230.000</option></select></div>
+    <div><label>Precio</label><select id="eTipo"><option value="Preventa">Preventa $180.000</option><option value="Regular">Regular $230.000</option><option value="Premium">Premium $295.000</option></select></div>
     <div><label>Seña cobrada</label><input id="eSena" type="number" inputmode="numeric"></div>
   </div>
   <button class="btn sec" id="btnGuardarDatos" onclick="guardarDatosFicha()">Guardar cambios</button>
   <label>Mensaje de confirmación</label>
   <textarea id="msg"></textarea>
   <button class="btn sec" onclick="copiar()">Copiar mensaje</button>
-  <a class="btn wa" id="btnWa" target="_blank" onclick="enviado()">Abrir WhatsApp de la clienta</a>
+  <a class="btn wa" id="btnWa" target="_blank" onclick="setWa(actual, document.getElementById('msg').value); enviado()">Abrir WhatsApp de la clienta</a>
   <button class="btn sec" id="btnNoEnv" style="display:none" onclick="noEnviado()">Marcar WhatsApp como NO enviado</button>
   <button class="btn sec" style="margin-top:28px" onclick="verMover()">Mover a otro horario</button>
   <div id="dMover" style="display:none"><label>Elegí el nuevo horario</label><div class="slots" id="dSlots"></div></div>
@@ -143,7 +144,8 @@ function run(){
   }});
 }
 let turnos = [], dia = '2026-11-28', actual = null, cancelArmado = false, plantilla = '', formLink = '', guiaLink = '', pendientes = 0;
-const PRECIOS = { Preventa: 180000, Regular: 230000 };
+const PRECIOS = { Preventa: 180000, Regular: 230000, Premium: 295000 };
+function tipoDe(precio){ return Object.keys(PRECIOS).find(k => PRECIOS[k] === precio) || 'Preventa'; }
 
 function cargar(despues){
   run().withSuccessHandler(r => {
@@ -171,7 +173,7 @@ function nombresNinos(t){
     .replace(/\s+/g, ' ').trim().replace(/\s+(de|con|tiene)$/i, '')).filter(Boolean).join(', ');
 }
 function clienteCont(t){ const n = nombresNinos(t.ninos); return t.clienta + (n ? ' / ' + n : ''); }
-function codigoCont(t){ return t.precio === 180000 ? 'Navidad-PREV' : 'Navidad'; }
+function codigoCont(t){ return { Preventa: 'Navidad-PREV', Regular: 'Navidad', Premium: 'Navidad-PREMIUM' }[tipoDe(t.precio)]; }
 function filaCont(t){ return [t.fventa || '', clienteCont(t), codigoCont(t)].join('\t'); }
 function pendientesCont(){ return turnos.filter(t => t.estado === 'Reservado' && t.reg !== 'Sí'); }
 function numero(s){ return Number(String(s || '').replace(/\D/g, '')) || 0; }
@@ -277,7 +279,48 @@ function copiarHorarios(){
   if (navigator.clipboard) navigator.clipboard.writeText(txt).then(ok).catch(() => copiaVieja(txt, ok)); else copiaVieja(txt, ok);
 }
 
+// ---- aviso: formularios sin completar hace más de 7 días ----
+function diasHasta(fecha){
+  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
+  return Math.round((new Date(fecha + 'T12:00:00') - new Date(hoy + 'T12:00:00')) / 86400000);
+}
+function urgente(t){ return diasHasta(t.fecha) <= 2; }
+function diasDesde(f){
+  const m = String(f || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!m) return 999;
+  return Math.floor((Date.now() - new Date(+m[3], +m[2] - 1, +m[1]).getTime()) / 86400000);
+}
+let alertaAbierta = false;
+function pintarAlerta(){
+  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
+  const atras = turnos.filter(t => t.estado === 'Reservado' && t.form !== 'Sí' && t.fecha >= hoy && (urgente(t) || (diasDesde(t.fventa) >= 7 && (!t.frec || diasDesde(t.frec) >= 3))))
+    .sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
+  const box = document.getElementById('alertaForm');
+  if (!atras.length) { box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  let h = `<div onclick="alertaAbierta=!alertaAbierta;pintarAlerta()" style="cursor:pointer;display:flex;gap:8px;align-items:center">
+    <b style="flex:1">⚠️ ${atras.length} ${atras.length === 1 ? 'clienta no completó' : 'clientas no completaron'} el formulario</b><span>${alertaAbierta ? '▴' : '▾'}</span></div>`;
+  if (alertaAbierta) atras.forEach(t => {
+    h += `<div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid #e8cfae">
+      <div style="flex:1;cursor:pointer" onclick="abrirDetalle(${t.fila})"><b>${esc(t.clienta)}</b>${urgente(t) ? ` <span style="color:#a8504a;font-size:12px;font-weight:600">· sesión ${['hoy', 'mañana', 'en 2 días'][diasHasta(t.fecha)]}</span>` : ''}<br><span style="font-size:12px;color:#8a7468">Turno ${esc(t.dia)} ${t.hora} · ${t.fventa ? 'reservó hace ' + diasDesde(t.fventa) + ' días' : 'sin fecha de reserva'}${t.frec ? ' · ya le recordaste ' + (diasDesde(t.frec) === 0 ? 'hoy' : 'hace ' + diasDesde(t.frec) + ' días') : ''}</span></div>
+      ${sinWa(t) ? '<span style="font-size:12px">Falta WhatsApp</span>' : `<a class="btn wa" style="margin:0;width:auto;padding:9px 12px;font-size:13px" target="${/iPhone|iPad|Android/i.test(navigator.userAgent) ? '_blank' : 'whatsapp'}" href="${linkRecordatorio(t)}" onclick="recordado(${t.fila})">Recordarle</a>`}</div>`;
+  });
+  box.innerHTML = h;
+}
+function recordado(f){
+  const t = buscar(f);
+  t.frec = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' });
+  setTimeout(pintarAlerta, 300); guardando(1);
+  run().withSuccessHandler(() => guardando(-1)).withFailureHandler(e => { error(e); guardando(-1); }).marcarFormRecordado(CLAVE, f);
+}
+function linkRecordatorio(t){
+  const txt = encodeURIComponent('Hola ' + String(t.clienta).split(' ')[0] + '! Te recuerdo completar el formulario para tu sesión de Navidad del ' + t.dia + ' a las ' + horaCorta(t.hora) + 'hs. Así la preparo para ustedes 🎄\n' + formLink + '\n\nAl final vas a encontrar la guía de vestuario. Gracias! 💖');
+  const tel = waIntl(t.wa);
+  return /iPhone|iPad|Android/i.test(navigator.userAgent) ? 'https://wa.me/' + tel + '?text=' + txt : 'https://web.whatsapp.com/send?phone=' + tel + '&text=' + txt;
+}
+
 function pintar(){
+  pintarAlerta();
   const nC = pendientesCont().length; document.getElementById('badgeCont').textContent = nC ? nC : '';
   if (dia === 'contable') return pintarContable();
   if (dia === 'extras') return pintarExtras();
@@ -294,11 +337,13 @@ function pesos(n){ return '$' + Math.round(Number(n) || 0).toString().replace(/\
 function horaCorta(h){ h = String(h); return h.endsWith(':00') ? h.slice(0, -3) : h; }
 function waIntl(s){ let d = String(s || '').replace(/\D/g, '').replace(/^0+/, ''); if (d.startsWith('54')) return d; if (d.length === 10) return '549' + d; return d; }
 function mensaje(t){
-  return (plantilla || '').replace(/{DIA}/g, t.dia).replace(/{HORA}/g, horaCorta(t.hora)).replace(/{SALDO}/g, t.saldo)
+  let p = plantilla || '';
+  if (t.precio === PRECIOS.Premium) p = p.replace(/30\s*min\s*\/\s*10\s*fotos/i, '1 hora / 15 fotos');
+  return p.replace(/{DIA}/g, t.dia).replace(/{HORA}/g, horaCorta(t.hora)).replace(/{SALDO}/g, t.saldo)
     .replace(/{FORM}/g, formLink).replace(/{GUIA}/g, guiaLink).replace(/{NOMBRE}/g, String(t.clienta || '').split(' ')[0]);
 }
-function setWa(t){
-  const txt = encodeURIComponent(mensaje(t)), tel = waIntl(t.wa);
+function setWa(t, texto){
+  const txt = encodeURIComponent(texto !== undefined ? texto : mensaje(t)), tel = waIntl(t.wa);
   const b = document.getElementById('btnWa');
   if (/iPhone|iPad|Android/i.test(navigator.userAgent)) { b.href = 'https://wa.me/' + tel + '?text=' + txt; b.target = '_blank'; }
   else { b.href = 'https://web.whatsapp.com/send?phone=' + tel + '&text=' + txt; b.target = 'whatsapp'; }
@@ -318,7 +363,7 @@ function guardar(){
   const t = actual;
   if (t.estado !== 'Libre') return aviso('Ese turno ya está reservado');
   Object.assign(t, { estado: 'Reservado', clienta: d.nombre, wa: d.wa, saldo: pesos(PRECIOS[d.tipo] - (Number(d.sena) || 0)),
-    conf: 'No', form: 'No', email: '', ninos: '', notas: d.notas, precio: PRECIOS[d.tipo], reg: 'No',
+    conf: 'No', form: 'No', email: '', ninos: '', notas: d.notas, precio: PRECIOS[d.tipo], reg: 'No', frec: '',
     fventa: new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' }) });
   pintar(); abrirDetalle(t.fila);
   guardando(1);
@@ -340,7 +385,7 @@ function refrescarFicha(){
   document.getElementById('dDatos').innerHTML =
     `<b>WhatsApp:</b> ${esc(actual.wa)}<br><b>Saldo en efectivo:</b> ${actual.saldo}<br>` +
     `<b>Formulario:</b> ${actual.form === 'Sí' ? '✓ completo' : 'falta completar'}`;
-  if (document.activeElement !== document.getElementById('eTipo')) document.getElementById('eTipo').value = actual.precio === 230000 ? 'Regular' : 'Preventa';
+  if (document.activeElement !== document.getElementById('eTipo')) document.getElementById('eTipo').value = tipoDe(actual.precio);
   if (document.activeElement !== document.getElementById('eSena')) document.getElementById('eSena').value = (actual.precio || 0) - numero(actual.saldo);
   ['eNombre','eWa','eNinos','eEmail','eNotas'].forEach(id => { const el = document.getElementById(id); if (document.activeElement !== el) el.value = actual[{eNombre:'clienta',eWa:'wa',eNinos:'ninos',eEmail:'email',eNotas:'notas'}[id]] || ''; });
   document.getElementById('msg').value = mensaje(actual);
@@ -382,9 +427,9 @@ function verMover(){
 }
 function moverA(dest){
   const a = actual, b = buscar(dest);
-  ['estado','clienta','wa','saldo','form','email','ninos','notas','precio','fventa','reg'].forEach(k => b[k] = a[k]);
+  ['estado','clienta','wa','saldo','form','email','ninos','notas','precio','fventa','reg','frec'].forEach(k => b[k] = a[k]);
   b.conf = 'No';
-  Object.assign(a, { estado: 'Libre', clienta: '', wa: '', saldo: '', conf: '', form: '', email: '', ninos: '', notas: '', precio: 0, fventa: '', reg: '' });
+  Object.assign(a, { estado: 'Libre', clienta: '', wa: '', saldo: '', conf: '', form: '', email: '', ninos: '', notas: '', precio: 0, fventa: '', reg: '', frec: '' });
   pintar(); abrirDetalle(dest); aviso('Turno movido ✓ · mandale el mensaje nuevo'); guardando(1);
   run().withSuccessHandler(() => guardando(-1)).withFailureHandler(e => { alert('⚠️ No se pudo mover el turno: ' + (e.message || e)); cerrar(); guardando(-1); }).mover(CLAVE, a.fila, dest);
 }
@@ -392,7 +437,7 @@ function cancelarTurno(){
   const b = document.getElementById('btnCancel');
   if (!cancelArmado) { cancelArmado = true; b.textContent = 'Tocá de nuevo para confirmar la cancelación'; return; }
   const f = actual.fila;
-  Object.assign(actual, { estado: 'Libre', clienta: '', wa: '', saldo: '', conf: '', form: '', email: '', ninos: '', notas: '', precio: 0, fventa: '', reg: '' });
+  Object.assign(actual, { estado: 'Libre', clienta: '', wa: '', saldo: '', conf: '', form: '', email: '', ninos: '', notas: '', precio: 0, fventa: '', reg: '', frec: '' });
   cerrar(); pintar(); aviso('Turno cancelado · quedó libre'); guardando(1);
   run().withSuccessHandler(() => guardando(-1)).withFailureHandler(e => { alert('⚠️ No se pudo cancelar: ' + (e.message || e)); guardando(-1); }).cancelar(CLAVE, f);
 }
