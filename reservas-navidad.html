@@ -95,14 +95,14 @@
   <button class="btn prim" id="rGuardar" onclick="guardar()">Reservar turno</button>
 </div>
 
-<div class="panel" id="pDetalle">
-  <button class="volver" onclick="cerrar()">← Volver</button>
+<div class="panel" id="pDetalle" style="padding-bottom:110px">
+  <button class="volver" onclick="volverFicha()">← Volver</button>
   <h2 id="dNombre"></h2>
   <div id="dTurno" class="resumen"></div>
   <div class="datos" id="dDatos"></div>
   <label>Nombre de la clienta</label><input id="eNombre">
   <label>WhatsApp</label><input id="eWa" type="tel" placeholder="Escribí el número">
-  <div id="avisoWa" style="display:none;font-size:12px;color:#a8504a;margin-top:6px">Falta su WhatsApp. Escribilo acá y tocá <b>Guardar cambios</b>: así se vincula su formulario (aunque ya lo haya completado).</div>
+  <div id="avisoWa" style="display:none;font-size:12px;color:#a8504a;margin-top:6px">Falta su WhatsApp. Escribilo acá y guardá: así se vincula su formulario (aunque ya lo haya completado).</div>
   <label>Niños (nombre y edad)</label><textarea id="eNinos" style="min-height:60px"></textarea>
   <label>Email</label><input id="eEmail" type="email">
   <label>Notas</label><textarea id="eNotas" style="min-height:60px"></textarea>
@@ -110,15 +110,18 @@
     <div><label>Precio</label><select id="eTipo"><option value="Preventa">Preventa $180.000</option><option value="Regular">Regular $230.000</option><option value="Premium">Premium $295.000</option></select></div>
     <div><label>Seña cobrada</label><input id="eSena" type="number" inputmode="numeric"></div>
   </div>
-  <button class="btn sec" id="btnGuardarDatos" onclick="guardarDatosFicha()">Guardar cambios</button>
   <label>Mensaje de confirmación</label>
   <textarea id="msg"></textarea>
   <button class="btn sec" onclick="copiar()">Copiar mensaje</button>
-  <a class="btn wa" id="btnWa" target="_blank" onclick="setWa(actual, document.getElementById('msg').value); enviado()">Abrir WhatsApp de la clienta</a>
+  <a class="btn wa" id="btnWa" target="_blank" onclick="if (!guardarSiHay()) return false; setWa(actual, document.getElementById('msg').value); enviado()">Abrir WhatsApp de la clienta</a>
   <button class="btn sec" id="btnNoEnv" style="display:none" onclick="noEnviado()">Marcar WhatsApp como NO enviado</button>
   <button class="btn sec" style="margin-top:28px" onclick="verMover()">Mover a otro horario</button>
   <div id="dMover" style="display:none"><label>Elegí el nuevo horario</label><div class="slots" id="dSlots"></div></div>
   <button class="btn peligro" id="btnCancel" onclick="cancelarTurno()">Cancelar turno</button>
+</div>
+<div id="barGuardar" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:15;background:#fff;border-top:1px solid #e4d6c5;padding:10px 16px calc(10px + env(safe-area-inset-bottom));box-shadow:0 -4px 14px rgba(90,62,54,.12)">
+  <div style="font-size:12px;color:#c08a4e;font-weight:600;text-align:center;margin-bottom:6px">Tenés cambios sin guardar</div>
+  <button class="btn prim" style="margin:0" onclick="guardarDatosFicha()">Guardar cambios</button>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -383,6 +386,8 @@ function guardar(){
 }
 
 function abrirDetalle(f){
+  if (hayCambios && actual && !guardarSiHay()) return;
+  marcarCambios(false);
   actual = buscar(f); cancelArmado = false;
   document.getElementById('btnCancel').textContent = 'Cancelar turno';
   document.getElementById('dMover').style.display = 'none';
@@ -395,18 +400,32 @@ function refrescarFicha(){
   document.getElementById('dDatos').innerHTML =
     `<b>WhatsApp:</b> ${esc(actual.wa)}<br><b>Saldo en efectivo:</b> ${actual.saldo}<br>` +
     `<b>Formulario:</b> ${actual.form === 'Sí' ? '✓ completo' : 'falta completar'}`;
-  if (document.activeElement !== document.getElementById('eTipo')) document.getElementById('eTipo').value = tipoDe(actual.precio);
-  if (document.activeElement !== document.getElementById('eSena')) document.getElementById('eSena').value = (actual.precio || 0) - numero(actual.saldo);
-  ['eNombre','eWa','eNinos','eEmail','eNotas'].forEach(id => { const el = document.getElementById(id); if (document.activeElement !== el) el.value = actual[{eNombre:'clienta',eWa:'wa',eNinos:'ninos',eEmail:'email',eNotas:'notas'}[id]] || ''; });
+  if (!hayCambios && document.activeElement !== document.getElementById('eTipo')) document.getElementById('eTipo').value = tipoDe(actual.precio);
+  if (!hayCambios && document.activeElement !== document.getElementById('eSena')) document.getElementById('eSena').value = (actual.precio || 0) - numero(actual.saldo);
+  ['eNombre','eWa','eNinos','eEmail','eNotas'].forEach(id => { const el = document.getElementById(id); if (!hayCambios && document.activeElement !== el) el.value = actual[{eNombre:'clienta',eWa:'wa',eNinos:'ninos',eEmail:'email',eNotas:'notas'}[id]] || ''; });
   document.getElementById('msg').value = mensaje(actual);
   setWa(actual);
   document.getElementById('avisoWa').style.display = sinWa(actual) ? 'block' : 'none';
   document.getElementById('btnNoEnv').style.display = actual.conf === 'Sí' ? 'block' : 'none';
 }
+// ---- cambios sin guardar en la ficha ----
+let hayCambios = false;
+function marcarCambios(si){
+  hayCambios = si;
+  document.getElementById('barGuardar').style.display = si ? 'block' : 'none';
+}
+['eNombre','eWa','eNinos','eEmail','eNotas','eTipo','eSena'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el && el.addEventListener) { el.addEventListener('input', () => marcarCambios(true)); el.addEventListener('change', () => marcarCambios(true)); }
+});
+function guardarSiHay(){ return hayCambios ? guardarDatosFicha() !== false : true; }
+function volverFicha(){ if (guardarSiHay()) { marcarCambios(false); cerrar(); } }
+
 function guardarDatosFicha(){
   const d = { nombre: val('eNombre'), wa: val('eWa'), ninos: val('eNinos'), email: val('eEmail'), notas: val('eNotas'), tipo: val('eTipo'), sena: Number(val('eSena')) || 0 };
-  if (!d.nombre) return aviso('El nombre no puede quedar vacío');
-  if (d.sena > PRECIOS[d.tipo]) return aviso('La seña no puede ser mayor al precio');
+  if (!d.nombre) { aviso('El nombre no puede quedar vacío'); return false; }
+  if (d.sena > PRECIOS[d.tipo]) { aviso('La seña no puede ser mayor al precio'); return false; }
+  marcarCambios(false);
   Object.assign(actual, { clienta: d.nombre, wa: d.wa, ninos: d.ninos, email: d.email.toLowerCase(), notas: d.notas,
     precio: PRECIOS[d.tipo], saldo: pesos(PRECIOS[d.tipo] - d.sena) });
   pintar(); refrescarFicha(); guardando(1);
@@ -419,6 +438,7 @@ function noEnviado(){
   run().withSuccessHandler(() => guardando(-1)).withFailureHandler(e => { error(e); guardando(-1); }).marcarConfirmada(CLAVE, actual.fila, 'No');
 }
 function copiar(){
+  if (!guardarSiHay()) return;
   const t = document.getElementById('msg');
   const ok = () => { aviso('Mensaje copiado ✓'); enviado(); };
   if (navigator.clipboard) navigator.clipboard.writeText(t.value).then(ok).catch(() => { t.select(); document.execCommand('copy'); ok(); });
@@ -453,7 +473,7 @@ function cancelarTurno(){
 }
 
 function abrir(id){ document.getElementById(id).classList.add('on'); window.scrollTo(0,0); }
-function cerrar(){ document.querySelectorAll('.panel').forEach(p => p.classList.remove('on')); }
+function cerrar(){ document.querySelectorAll('.panel').forEach(p => p.classList.remove('on')); const b = document.getElementById('barGuardar'); if (b) b.style.display = 'none'; hayCambios = false; }
 function val(id){ return document.getElementById(id).value.trim(); }
 function esc(s){ return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function aviso(t){ const x = document.getElementById('toast'); x.textContent = t; x.style.display = 'block'; setTimeout(() => x.style.display = 'none', 2600); }
