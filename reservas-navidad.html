@@ -88,9 +88,10 @@
   <label>WhatsApp</label><input id="rWa" type="tel" placeholder="Escribí el número" oninput="armadoSinWa=false;document.getElementById('rAvisoWa').style.display='none';document.getElementById('rGuardar').textContent='Reservar turno'">
   <div id="rAvisoWa" style="display:none;font-size:13px;color:#a8504a;margin-top:6px;font-weight:600">⚠️ Falta el WhatsApp. Sin él, su formulario no se va a vincular solo. Podés cargarlo ahora o después desde su ficha.</div>
   <div class="fila2">
-    <div><label>Precio</label><select id="rTipo"><option value="Preventa">Preventa $180.000</option><option value="Regular">Regular $230.000</option><option value="Premium">Premium $295.000</option></select></div>
+    <div><label>Precio</label><select id="rTipo" onchange="verPrecio('r')"><option value="Preventa">Preventa $180.000</option><option value="Regular">Regular $230.000</option><option value="Premium">Premium $295.000</option><option value="Personalizado">Precio personalizado</option></select></div>
     <div><label>Seña recibida</label><input id="rSena" type="number" inputmode="numeric" value="80000"></div>
   </div>
+  <div id="rPrecioBox" style="display:none"><label>Precio de esta sesión (0 si es canje)</label><input id="rPrecio" type="number" inputmode="numeric"></div>
   <label>Notas (opcional)</label><textarea id="rNotas"></textarea>
   <button class="btn prim" id="rGuardar" onclick="guardar()">Reservar turno</button>
 </div>
@@ -107,9 +108,10 @@
   <label>Email</label><input id="eEmail" type="email">
   <label>Notas</label><textarea id="eNotas" style="min-height:60px"></textarea>
   <div class="fila2">
-    <div><label>Precio</label><select id="eTipo"><option value="Preventa">Preventa $180.000</option><option value="Regular">Regular $230.000</option><option value="Premium">Premium $295.000</option></select></div>
+    <div><label>Precio</label><select id="eTipo" onchange="verPrecio('e')"><option value="Preventa">Preventa $180.000</option><option value="Regular">Regular $230.000</option><option value="Premium">Premium $295.000</option><option value="Personalizado">Precio personalizado</option></select></div>
     <div><label>Seña cobrada</label><input id="eSena" type="number" inputmode="numeric"></div>
   </div>
+  <div id="ePrecioBox" style="display:none"><label>Precio de esta sesión (0 si es canje)</label><input id="ePrecio" type="number" inputmode="numeric"></div>
   <label>Mensaje de confirmación</label>
   <textarea id="msg"></textarea>
   <button class="btn sec" onclick="copiar()">Copiar mensaje</button>
@@ -149,7 +151,10 @@ function run(){
 }
 let turnos = [], dia = '2026-11-28', actual = null, cancelArmado = false, plantilla = '', formLink = '', guiaLink = '', pendientes = 0;
 const PRECIOS = { Preventa: 180000, Regular: 230000, Premium: 295000 };
-function tipoDe(precio){ return Object.keys(PRECIOS).find(k => PRECIOS[k] === precio) || 'Preventa'; }
+function tipoDe(precio){ return Object.keys(PRECIOS).find(k => PRECIOS[k] === precio) || 'Personalizado'; }
+function precioDe(p){ return val(p + 'Tipo') === 'Personalizado' ? Math.max(0, Math.round(Number(val(p + 'Precio')) || 0)) : PRECIOS[val(p + 'Tipo')]; }
+function verPrecio(p){ document.getElementById(p + 'PrecioBox').style.display = val(p + 'Tipo') === 'Personalizado' ? 'block' : 'none'; }
+function faltaPrecio(p){ return val(p + 'Tipo') === 'Personalizado' && val(p + 'Precio') === ''; }
 
 function cargar(despues){
   run().withSuccessHandler(r => {
@@ -177,9 +182,9 @@ function nombresNinos(t){
     .replace(/\s+/g, ' ').trim().replace(/\s+(de|con|tiene)$/i, '')).filter(Boolean).join(', ');
 }
 function clienteCont(t){ const n = nombresNinos(t.ninos); return t.clienta + (n ? ' / ' + n : ''); }
-function codigoCont(t){ return { Preventa: 'Navidad-PREV', Regular: 'Navidad', Premium: 'Navidad-PREMIUM' }[tipoDe(t.precio)]; }
+function codigoCont(t){ return { Preventa: 'Navidad-PREV', Regular: 'Navidad', Premium: 'Navidad-PREMIUM', Personalizado: 'Navidad' }[tipoDe(t.precio)]; }
 function filaCont(t){ return [t.fventa || '', clienteCont(t), codigoCont(t)].join('\t'); }
-function pendientesCont(){ return turnos.filter(t => t.estado === 'Reservado' && t.reg !== 'Sí'); }
+function pendientesCont(){ return turnos.filter(t => t.estado === 'Reservado' && t.reg !== 'Sí' && t.precio > 0); }
 function numero(s){ return Number(String(s || '').replace(/\D/g, '')) || 0; }
 function resumenVentas(){
   const v = turnos.filter(t => t.estado === 'Reservado');
@@ -360,7 +365,7 @@ function abrirReserva(f){
   ['rNombre','rWa','rNotas'].forEach(id => document.getElementById(id).value = '');
   armadoSinWa = false; document.getElementById('rAvisoWa').style.display = 'none'; document.getElementById('rGuardar').textContent = 'Reservar turno';
   document.getElementById('rSena').value = 80000;
-  document.getElementById('rTipo').value = 'Preventa';
+  document.getElementById('rTipo').value = 'Preventa'; document.getElementById('rPrecio').value = ''; verPrecio('r');
   abrir('pReserva');
 }
 function guardar(){
@@ -375,8 +380,11 @@ function guardar(){
   }
   const t = actual;
   if (t.estado !== 'Libre') return aviso('Ese turno ya está reservado');
-  Object.assign(t, { estado: 'Reservado', clienta: d.nombre, wa: d.wa, saldo: pesos(PRECIOS[d.tipo] - (Number(d.sena) || 0)),
-    conf: 'No', form: 'No', email: '', ninos: '', notas: d.notas, precio: PRECIOS[d.tipo], reg: 'No', frec: '',
+  if (faltaPrecio('r')) return aviso('Escribí el precio (0 si es canje)');
+  d.precio = precioDe('r');
+  if ((Number(d.sena) || 0) > d.precio) return aviso('La seña no puede ser mayor al precio');
+  Object.assign(t, { estado: 'Reservado', clienta: d.nombre, wa: d.wa, saldo: pesos(d.precio - (Number(d.sena) || 0)),
+    conf: 'No', form: 'No', email: '', ninos: '', notas: d.notas, precio: d.precio, reg: 'No', frec: '',
     fventa: new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' }) });
   pintar(); abrirDetalle(t.fila);
   guardando(1);
@@ -400,7 +408,7 @@ function refrescarFicha(){
   document.getElementById('dDatos').innerHTML =
     `<b>WhatsApp:</b> ${esc(actual.wa)}<br><b>Saldo en efectivo:</b> ${actual.saldo}<br>` +
     `<b>Formulario:</b> ${actual.form === 'Sí' ? '✓ completo' : 'falta completar'}`;
-  if (!hayCambios && document.activeElement !== document.getElementById('eTipo')) document.getElementById('eTipo').value = tipoDe(actual.precio);
+  if (!hayCambios && document.activeElement !== document.getElementById('eTipo')) { document.getElementById('eTipo').value = tipoDe(actual.precio); document.getElementById('ePrecio').value = actual.precio || 0; verPrecio('e'); }
   if (!hayCambios && document.activeElement !== document.getElementById('eSena')) document.getElementById('eSena').value = (actual.precio || 0) - numero(actual.saldo);
   ['eNombre','eWa','eNinos','eEmail','eNotas'].forEach(id => { const el = document.getElementById(id); if (!hayCambios && document.activeElement !== el) el.value = actual[{eNombre:'clienta',eWa:'wa',eNinos:'ninos',eEmail:'email',eNotas:'notas'}[id]] || ''; });
   document.getElementById('msg').value = mensaje(actual);
@@ -414,7 +422,7 @@ function marcarCambios(si){
   hayCambios = si;
   document.getElementById('barGuardar').style.display = si ? 'block' : 'none';
 }
-['eNombre','eWa','eNinos','eEmail','eNotas','eTipo','eSena'].forEach(id => {
+['eNombre','eWa','eNinos','eEmail','eNotas','eTipo','eSena','ePrecio'].forEach(id => {
   const el = document.getElementById(id);
   if (el && el.addEventListener) { el.addEventListener('input', () => marcarCambios(true)); el.addEventListener('change', () => marcarCambios(true)); }
 });
@@ -424,10 +432,12 @@ function volverFicha(){ if (guardarSiHay()) { marcarCambios(false); cerrar(); } 
 function guardarDatosFicha(){
   const d = { nombre: val('eNombre'), wa: val('eWa'), ninos: val('eNinos'), email: val('eEmail'), notas: val('eNotas'), tipo: val('eTipo'), sena: Number(val('eSena')) || 0 };
   if (!d.nombre) { aviso('El nombre no puede quedar vacío'); return false; }
-  if (d.sena > PRECIOS[d.tipo]) { aviso('La seña no puede ser mayor al precio'); return false; }
+  if (faltaPrecio('e')) { aviso('Escribí el precio (0 si es canje)'); return false; }
+  d.precio = precioDe('e');
+  if (d.sena > d.precio) { aviso('La seña no puede ser mayor al precio'); return false; }
   marcarCambios(false);
   Object.assign(actual, { clienta: d.nombre, wa: d.wa, ninos: d.ninos, email: d.email.toLowerCase(), notas: d.notas,
-    precio: PRECIOS[d.tipo], saldo: pesos(PRECIOS[d.tipo] - d.sena) });
+    precio: d.precio, saldo: pesos(d.precio - d.sena) });
   pintar(); refrescarFicha(); guardando(1);
   run().withSuccessHandler(() => { aviso('Cambios guardados ✓'); guardando(-1); })
     .withFailureHandler(e => { alert('⚠️ No se pudieron guardar los cambios: ' + (e.message || e)); guardando(-1); })
