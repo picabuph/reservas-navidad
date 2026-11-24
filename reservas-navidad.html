@@ -182,9 +182,9 @@ function elegirDia(el){
 }
 // ---- registro contable ----
 function nombresNinos(t){
-  return String(t || '').split(/\n|,|;|\sy\s|\s-\s/).map(x => x
+  return String(t || '').replace(/(\d+[.,]?\d*\s*)?(años|año|meses|mes)?\s*y\s+medio/gi, ' ').split(/\n|,|;|\sy\s|\s-\s/).map(x => x
     .replace(/\(.*?\)/g, '').replace(/\d+[.,]?\d*\s*(años|año|anios|meses|mes|m|a|días|dias|semanas)?\b\.?/gi, '')
-    .replace(/\s+/g, ' ').trim().replace(/\s+(de|con|tiene)$/i, '')).filter(Boolean).join(', ');
+    .replace(/\s+/g, ' ').trim().replace(/\s+(de|con|tiene)$/i, '')).filter(x => x && !/^(y|de|medio|años?|meses?)$/i.test(x)).join(', ');
 }
 function clienteCont(t){ const n = nombresNinos(t.ninos); return t.clienta + (n ? ' / ' + n : ''); }
 function codigoCont(t){ return { Preventa: 'Navidad-PREV', Regular: 'Navidad', Premium: 'Navidad-PREMIUM', Personalizado: 'Navidad' }[tipoDe(t.precio)]; }
