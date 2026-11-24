@@ -11,8 +11,8 @@
   header{background:var(--cafe);color:var(--crema);padding:22px 16px 0;position:sticky;top:0;z-index:5}
   h1{font-family:'Yeseva One',serif;font-weight:400;font-size:26px;margin:0}
   .sub{font-size:12px;opacity:.75;margin:2px 0 14px;letter-spacing:.04em}
-  .tabs{display:flex;gap:6px}
-  .tab{flex:1;padding:11px 4px;text-align:center;border-radius:10px 10px 0 0;background:rgba(255,255,255,.1);font-weight:500;font-size:13px;line-height:1.2;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .tabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 -16px;padding:0 16px}.tabs::-webkit-scrollbar{display:none}
+  .tab{flex:1 0 auto;min-width:76px;padding:11px 10px;white-space:nowrap;text-align:center;border-radius:10px 10px 0 0;background:rgba(255,255,255,.1);font-weight:500;font-size:13px;line-height:1.2;cursor:pointer;display:flex;align-items:center;justify-content:center}
   .grupo{margin:4px 0 14px}.grupoTit{display:flex;align-items:center;gap:8px;padding:12px 2px;border-bottom:1px solid var(--linea);margin-bottom:10px;cursor:pointer}
   .grupoTit .t{font-family:'Yeseva One',serif;color:var(--cafe);font-size:18px;flex:1}.grupoTit .n{font-size:12px;color:var(--suave)}
   .grupoTit .fl{color:var(--cafe);transition:transform .2s}.grupo.cerrado .fl{transform:rotate(-90deg)}.grupo.cerrado .cuerpo{display:none}
@@ -63,15 +63,20 @@
 <header>
   <h1>Reservas Navidad</h1>
   <div class="sub">PICABÚ FOTOGRAFÍA</div>
-  <div class="tabs">
-    <div class="tab on" data-f="2026-11-28" onclick="elegirDia(this)">Sábado 28</div>
-    <div class="tab" data-f="2026-11-29" onclick="elegirDia(this)">Domingo 29</div>
-    <div class="tab" data-f="extras" onclick="elegirDia(this)">Fechas extras</div>
-    <div class="tab" data-f="contable" onclick="elegirDia(this)">Contable <span id="badgeCont"></span></div>
-  </div>
+  <div class="tabs" id="tabs"><div class="tab on">Cargando…</div></div>
 </header>
+<div id="alertaEntrega" style="display:none;margin:12px 16px 0;background:#eef2ee;border:1px solid #cfdccf;border-radius:12px;padding:12px 14px;font-size:14px;color:#3b2a25"></div>
 <div id="alertaForm" style="display:none;margin:12px 16px 0;background:#f6e8d6;border:1px solid #e8cfae;border-radius:12px;padding:12px 14px;font-size:14px;color:#3b2a25"></div>
 <main id="lista"><div class="cargando">Cargando turnos…</div></main>
+
+<div class="panel" id="pDia">
+  <button class="volver" onclick="cerrar()">← Volver</button>
+  <h2>Nueva fecha completa</h2>
+  <p class="resumen">Se crea con todos los horarios y aparece con su propia solapa, como el sábado y el domingo.</p>
+  <label>Fecha</label><input id="dFecha" type="date" min="2026-10-01">
+  <label>Horarios (separados por coma)</label><input id="dHoras" value="10:00, 11:00, 12:00, 13:00, 14:30, 15:30, 16:30, 17:30">
+  <button class="btn prim" id="dGuardar" onclick="agregarDia()">Crear fecha completa</button>
+</div>
 
 <div class="panel" id="pExtra">
   <button class="volver" onclick="cerrar()">← Volver</button>
@@ -159,7 +164,7 @@ function faltaPrecio(p){ return val(p + 'Tipo') === 'Personalizado' && val(p + '
 function cargar(despues){
   run().withSuccessHandler(r => {
     if (pendientes > 0) return;
-    if (Array.isArray(r)) turnos = r; else { turnos = r.turnos; plantilla = r.plantilla; formLink = r.form; guiaLink = r.guia; }
+    if (Array.isArray(r)) turnos = r; else { turnos = r.turnos; plantilla = r.plantilla; formLink = r.form; guiaLink = r.guia; if (Array.isArray(r.dias) && r.dias.length) DIAS_EVENTO = r.dias.slice().sort(); }
     pintar();
     if (actual && document.getElementById('pDetalle').classList.contains('on')) { const a = buscar(actual.fila); if (a && a.estado === 'Reservado') { actual = a; refrescarFicha(); } }
     if (despues) despues();
@@ -221,7 +226,7 @@ function registrar(f){
 }
 
 // ---- fechas extras ----
-const DIAS_EVENTO = ['2026-11-28', '2026-11-29'];
+let DIAS_EVENTO = ['2026-11-28', '2026-11-29'];
 let cerrados = {};
 try { cerrados = JSON.parse(localStorage.getItem('picabuCerrados') || '{}'); } catch (e) {}
 function esExtra(t){ return !DIAS_EVENTO.includes(t.fecha); }
@@ -237,7 +242,8 @@ function pintarExtras(){
     del.forEach(t => { h += tarjeta(t); if (t.estado === 'Libre') h += `<button class="quitar" onclick="quitarExtra(${t.fila})">Quitar este horario</button>`; });
     h += `<button class="mini" onclick="abrirExtra('${f}')">+ Agregar horario este día</button></div></div>`;
   });
-  h += `<button class="btn prim" style="margin-top:6px" onclick="abrirExtra('')">+ Agregar otra fecha</button>`;
+  h += `<button class="btn prim" style="margin-top:6px" onclick="abrirExtra('')">+ Agregar otra fecha (turnos sueltos)</button>
+    <button class="btn sec" onclick="abrirDia()">+ Nueva fecha completa (con su propia solapa)</button>`;
   document.getElementById('lista').innerHTML = h;
 }
 function plegar(f){ cerrados[f] = !cerrados[f]; try { localStorage.setItem('picabuCerrados', JSON.stringify(cerrados)); } catch (e) {} pintar(); }
@@ -264,7 +270,7 @@ function tarjeta(t){
         <div class="chips"><span class="chip ${t.conf==='Sí'?'ok':'pend'}">${t.conf==='Sí'?'✓ WhatsApp enviado':'Falta enviar WhatsApp'}</span>
         ${sinWa(t) ? '<span class="chip pend">⚠️ Falta WhatsApp</span>' : ''}
         <span class="chip ${t.form==='Sí'?'ok':'pend'}">${t.form==='Sí'?'✓ Formulario':'Falta formulario'}</span>
-        <span class="chip">Saldo ${t.saldo}</span></div></div><div class="flecha">›</div></div>`;
+        <span class="chip">Saldo ${t.saldo}</span>${chipEdicion(t)}</div></div><div class="flecha">›</div></div>`;
   }
   return `<div class="card vacio" onclick="abrirReserva(${t.fila})"><div class="hora">${t.hora}</div><div class="info libre">Libre · tocá para reservar</div><div class="flecha">+</div></div>`;
 }
@@ -300,7 +306,63 @@ function diasDesde(f){
   return Math.floor((Date.now() - new Date(+m[3], +m[2] - 1, +m[1]).getTime()) / 86400000);
 }
 let alertaAbierta = false;
+// ---- estado de edición (lee la app de equipo, solo lectura) ----
+let sesionesEquipo = null, fbEstado = 'off', alertaEntregaAbierta = false;
+const ESTADOS_EDICION = { galeria_pendiente: 'Galería pendiente', pendiente_cliente: 'Pendiente cliente', edicion_renu: 'Edición Renu',
+  edicion_terminada: 'Edición terminada', para_subir: 'Para subir', subidas: 'Subidas ✓' };
+function normTxt(s){ return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim(); }
+function sesionDe(t){
+  if (!sesionesEquipo) return null;
+  const mama = normTxt(t.clienta).split(' (')[0];
+  const nom = mama.split(' ')[0];
+  const cands = sesionesEquipo.filter(c => c.fechaSesion === t.fecha);
+  return cands.find(c => normTxt(c.mama + ' ' + c.bebe).includes(mama)) || cands.find(c => nom.length > 2 && normTxt(c.mama + ' ' + c.bebe).includes(nom)) || null;
+}
+function hoyStr(){ return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }); }
+function chipEdicion(t){
+  if (!sesionesEquipo) return '';
+  const s = sesionDe(t);
+  if (s) return `<span class="chip ${s.estado === 'subidas' ? 'ok' : ''}">${s.estado === 'subidas' ? '✓ Entregada' : '✏️ ' + (ESTADOS_EDICION[s.estado] || s.estado)}</span>`;
+  return t.fecha < hoyStr() ? '<span class="chip pend">⚠️ No cargada en edición</span>' : '';
+}
+function pintarEntrega(){
+  const box = document.getElementById('alertaEntrega');
+  if (fbEstado === 'login') {
+    box.style.display = 'block';
+    box.innerHTML = `<div style="display:flex;gap:8px;align-items:center"><b style="flex:1">Conectar con la app de edición</b><span style="cursor:pointer" onclick="fbEstado='off';pintarEntrega()">✕</span></div>
+      <div style="font-size:12px;color:#8a7468;margin:4px 0 8px">Usá el mismo mail y contraseña de la app de equipo (solo se pide una vez).</div>
+      <input id="fbMail" type="email" placeholder="Mail" style="margin-bottom:6px"><input id="fbPass" type="password" placeholder="Contraseña">
+      <button class="btn prim" style="margin-top:8px" onclick="fbEntrar()">Conectar</button>`;
+    return;
+  }
+  if (!sesionesEquipo) { box.style.display = fbEstado === 'conectable' ? 'block' : 'none';
+    if (fbEstado === 'conectable') box.innerHTML = '<div style="cursor:pointer" onclick="fbEstado=\'login\';pintarEntrega()">🔗 <b>Ver el estado de edición de cada sesión</b> · tocá para conectar</div>';
+    return; }
+  const hoy = hoyStr();
+  const pend = turnos.filter(t => t.estado === 'Reservado' && t.fecha < hoy).filter(t => { const s = sesionDe(t); return !s || s.estado !== 'subidas'; })
+    .sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
+  if (!pend.length) { box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  let h = `<div onclick="alertaEntregaAbierta=!alertaEntregaAbierta;pintarEntrega()" style="cursor:pointer;display:flex;gap:8px;align-items:center">
+    <b style="flex:1">📦 ${pend.length} ${pend.length === 1 ? 'sesión sin entregar' : 'sesiones sin entregar'}</b><span>${alertaEntregaAbierta ? '▴' : '▾'}</span></div>`;
+  if (alertaEntregaAbierta) pend.forEach(t => { const s = sesionDe(t);
+    h += `<div onclick="abrirDetalle(${t.fila})" style="cursor:pointer;margin-top:10px;padding-top:10px;border-top:1px solid #cfdccf"><b>${esc(t.clienta)}</b><br>
+      <span style="font-size:12px;color:#8a7468">Sesión ${esc(t.dia)} · ${s ? ESTADOS_EDICION[s.estado] || s.estado : 'no está cargada en la app de edición'}</span></div>`; });
+  box.innerHTML = h;
+}
+function fbEntrar(){
+  const m = val('fbMail'), p = document.getElementById('fbPass').value;
+  if (!m || !p) return aviso('Completá mail y contraseña');
+  window.__fb.login(m, p).then(() => { aviso('Conectado ✓'); fbCargar(); }).catch(e => aviso(/unauthorized-domain/.test(e.code || '') ? 'Falta autorizar este sitio en Firebase' : 'Mail o contraseña incorrectos'));
+}
+function fbCargar(){
+  if (!window.__fb) return;
+  window.__fb.sesiones().then(l => { sesionesEquipo = l; fbEstado = 'ok'; pintar(); }).catch(() => { fbEstado = 'conectable'; pintarEntrega(); });
+}
+window.__fbListo = function(logueado){ if (logueado) fbCargar(); else { fbEstado = 'conectable'; pintarEntrega(); } };
+
 function pintarAlerta(){
+  pintarEntrega();
   const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
   const atras = turnos.filter(t => t.estado === 'Reservado' && t.form !== 'Sí' && t.fecha >= hoy && (urgente(t) || (diasDesde(t.fventa) >= 7 && (!t.frec || diasDesde(t.frec) >= 3))))
     .sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
@@ -328,12 +390,56 @@ function linkRecordatorio(t){
   return /iPhone|iPad|Android/i.test(navigator.userAgent) ? 'https://wa.me/' + tel + '?text=' + txt : 'https://web.whatsapp.com/send?phone=' + tel + '&text=' + txt;
 }
 
+// ---- solapas dinámicas ----
+function etiquetaDia(f){
+  const t = turnos.find(x => x.fecha === f && x.dia);
+  if (!t) return f.slice(8) + '/' + f.slice(5, 7);
+  const p = t.dia.split(' '); return p[0] + ' ' + String(Number((p[1] || '').split('/')[0]) || '');
+}
+function pintarTabs(){
+  const tabs = DIAS_EVENTO.map(f => [f, etiquetaDia(f)]).concat([['agenda', '🗓 Agenda'], ['extras', 'Fechas extras'], ['contable', 'Contable <span id="badgeCont"></span>']]);
+  document.getElementById('tabs').innerHTML = tabs.map(([f, l]) => `<div class="tab${f === dia ? ' on' : ''}" data-f="${f}" onclick="elegirDia(this)">${l}</div>`).join('');
+}
+function abrirDia(){ document.getElementById('dFecha').value = ''; abrir('pDia'); }
+function agregarDia(){
+  const f = val('dFecha');
+  const horas = val('dHoras').split(/[,;\s]+/).map(h => h.trim()).filter(Boolean).map(h => /^\d{1,2}$/.test(h) ? h + ':00' : h).map(h => h.padStart(5, '0'));
+  if (!f) return aviso('Elegí la fecha');
+  if (DIAS_EVENTO.includes(f)) return aviso('Esa fecha ya tiene su solapa');
+  if (!horas.length || horas.some(h => !/^\d{2}:\d{2}$/.test(h))) return aviso('Revisá los horarios (ej: 10:00, 14:30)');
+  const b = document.getElementById('dGuardar'); b.disabled = true; b.textContent = 'Creando…';
+  run().withSuccessHandler(() => { b.disabled = false; b.textContent = 'Crear fecha completa'; cerrar(); dia = f; aviso('Fecha creada ✓'); cargar(); })
+    .withFailureHandler(e => { b.disabled = false; b.textContent = 'Crear fecha completa'; error(e); }).agregarDiaCompleto(CLAVE, f, horas);
+}
+
+// ---- agenda: todos los turnos en orden ----
+let agendaLibres = false, agendaPasadas = false;
+function pintarAgenda(){
+  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
+  const lista = turnos.filter(t => t.estado !== 'Eliminado' && (agendaLibres || t.estado === 'Reservado') && (agendaPasadas || t.fecha >= hoy))
+    .sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
+  const res = turnos.filter(t => t.estado === 'Reservado' && (agendaPasadas || t.fecha >= hoy)).length;
+  let h = `<p class="resumen">${res} turnos reservados</p>
+    <div style="display:flex;gap:16px;margin:0 0 14px;font-size:13px;color:var(--suave)">
+    <label style="margin:0;text-transform:none;letter-spacing:0;font-weight:500;display:flex;gap:6px;align-items:center"><input type="checkbox" style="width:auto" ${agendaLibres ? 'checked' : ''} onchange="agendaLibres=this.checked;pintar()"> Mostrar libres</label>
+    <label style="margin:0;text-transform:none;letter-spacing:0;font-weight:500;display:flex;gap:6px;align-items:center"><input type="checkbox" style="width:auto" ${agendaPasadas ? 'checked' : ''} onchange="agendaPasadas=this.checked;pintar()"> Fechas pasadas</label></div>`;
+  let ult = '';
+  lista.forEach(t => {
+    if (t.fecha !== ult) { ult = t.fecha; h += `<div class="grupoTit" style="cursor:default"><span class="t">${esc(t.dia)}</span><span class="n">${lista.filter(x => x.fecha === t.fecha && x.estado === 'Reservado').length} reservados</span></div>`; }
+    h += tarjeta(t);
+  });
+  if (!lista.length) h += '<p class="resumen" style="text-align:center;padding:24px 0">No hay turnos para mostrar</p>';
+  document.getElementById('lista').innerHTML = h;
+}
+
 function pintar(){
+  pintarTabs();
+  if (dia === 'agenda') { pintarAlerta(); const nC0 = pendientesCont().length; document.getElementById('badgeCont').textContent = nC0 ? nC0 : ''; return pintarAgenda(); }
   pintarAlerta();
   const nC = pendientesCont().length; document.getElementById('badgeCont').textContent = nC ? nC : '';
   if (dia === 'contable') return pintarContable();
   if (dia === 'extras') return pintarExtras();
-  const del = turnos.filter(t => t.fecha === dia);
+  const del = turnos.filter(t => t.fecha === dia && t.estado !== 'Eliminado').sort((a, b) => a.hora.localeCompare(b.hora));
   const res = del.filter(t => t.estado === 'Reservado');
   let h = `<p class="resumen">${res.length} reservados · ${del.length - res.length} libres</p>` + BTN_HORARIOS;
   del.forEach(t => { h += tarjeta(t); });
@@ -489,6 +595,20 @@ function esc(s){ return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;
 function aviso(t){ const x = document.getElementById('toast'); x.textContent = t; x.style.display = 'block'; setTimeout(() => x.style.display = 'none', 2600); }
 function error(e){ aviso('Ups: ' + (e && e.message ? e.message : e)); }
 cargar();
+</script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+const app = initializeApp({ apiKey: "AIzaSyBk0X0tN037Z2N68_Y4Bfa9e_P01horThI", authDomain: "picabu-app.firebaseapp.com", projectId: "picabu-app",
+  storageBucket: "picabu-app.firebasestorage.app", messagingSenderId: "772235711232", appId: "1:772235711232:web:4b6d60bc1b01fad55599e5" }, 'navidad');
+const auth = getAuth(app), db = getFirestore(app);
+window.__fb = {
+  login: (m, p) => signInWithEmailAndPassword(auth, m, p),
+  sesiones: async () => { const s = await getDoc(doc(db, 'equipo', 'sesiones')); return (s.exists() && Array.isArray(s.data().lista)) ? s.data().lista : []; }
+};
+let primera = true;
+onAuthStateChanged(auth, u => { if (primera || u) { primera = false; window.__fbListo && window.__fbListo(!!u); } });
 </script>
 </body>
 </html>
