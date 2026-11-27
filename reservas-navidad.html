@@ -80,7 +80,7 @@
 
 <div class="panel" id="pExtra">
   <button class="volver" onclick="cerrar()">← Volver</button>
-  <h2>Agregar turno extra</h2>
+  <h2>Agregar horario</h2>
   <label>Fecha</label><input id="xFecha" type="date" min="2026-10-01">
   <label>Horario</label><input id="xHora" type="time" step="900" value="16:00">
   <button class="btn prim" id="xGuardar" onclick="agregarExtra()">Agregar horario</button>
@@ -251,7 +251,6 @@ function abrirExtra(f){ document.getElementById('xFecha').value = f; abrir('pExt
 function agregarExtra(){
   const f = val('xFecha'), h = val('xHora');
   if (!f || !h) return aviso('Elegí fecha y horario');
-  if (DIAS_EVENTO.includes(f)) return aviso('Esa fecha ya tiene su propia solapa');
   if (turnos.some(t => t.fecha === f && t.hora === h && t.estado !== 'Eliminado')) return aviso('Ese horario ya existe');
   const b = document.getElementById('xGuardar'); b.disabled = true; b.textContent = 'Agregando…';
   run().withSuccessHandler(() => { b.disabled = false; b.textContent = 'Agregar horario'; cerrados[f] = false; cerrar(); aviso('Horario agregado ✓'); cargar(); })
@@ -397,7 +396,11 @@ function etiquetaDia(f){
   const p = t.dia.split(' '); return p[0] + ' ' + String(Number((p[1] || '').split('/')[0]) || '');
 }
 function pintarTabs(){
-  const tabs = DIAS_EVENTO.map(f => [f, etiquetaDia(f)]).concat([['agenda', '🗓 Agenda'], ['extras', 'Fechas extras'], ['contable', 'Contable <span id="badgeCont"></span>']]);
+  // Orden: días originales del evento → Fechas extras → fechas completas agregadas → Contable → Agenda
+  const originales = DIAS_EVENTO.filter(f => ['2026-11-28', '2026-11-29'].includes(f));
+  const agregadas = DIAS_EVENTO.filter(f => !originales.includes(f));
+  const tabs = originales.map(f => [f, etiquetaDia(f)]).concat([['extras', 'Fechas extras']], agregadas.map(f => [f, etiquetaDia(f)]),
+    [['contable', 'Contable <span id="badgeCont"></span>'], ['agenda', '🗓 Agenda']]);
   document.getElementById('tabs').innerHTML = tabs.map(([f, l]) => `<div class="tab${f === dia ? ' on' : ''}" data-f="${f}" onclick="elegirDia(this)">${l}</div>`).join('');
 }
 function abrirDia(){ document.getElementById('dFecha').value = ''; abrir('pDia'); }
@@ -442,7 +445,8 @@ function pintar(){
   const del = turnos.filter(t => t.fecha === dia && t.estado !== 'Eliminado').sort((a, b) => a.hora.localeCompare(b.hora));
   const res = del.filter(t => t.estado === 'Reservado');
   let h = `<p class="resumen">${res.length} reservados · ${del.length - res.length} libres</p>` + BTN_HORARIOS;
-  del.forEach(t => { h += tarjeta(t); });
+  del.forEach(t => { h += tarjeta(t); if (t.estado === 'Libre') h += `<button class="quitar" onclick="quitarExtra(${t.fila})">Quitar este horario</button>`; });
+  h += `<button class="mini" style="margin-top:4px" onclick="abrirExtra('${dia}')">+ Agregar horario a este día</button>`;
   document.getElementById('lista').innerHTML = h;
 }
 function buscar(f){ return turnos.find(t => t.fila === f); }
